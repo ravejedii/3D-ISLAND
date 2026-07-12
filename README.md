@@ -1,5 +1,7 @@
 # Floating Isles
 
+**▶ Play it now: <https://ravejedii.github.io/GAMETEST/>**
+
 A 3D explorable world that runs in the browser. A scattered kingdom drifts in
 the endless sky — cross rope bridges between floating islands, explore the
 castle, and recover the 10 lost sky crystals.
@@ -54,3 +56,19 @@ across a bridge to a satellite island with no teleports, collects crystals,
 verifies the win state, falls off the world and respawns, and measures FPS on
 a six-waypoint tour (thresholds are calibrated for software rendering in CI;
 `PERF_MIN_FPS` overrides them on real GPUs).
+
+## Deployment
+
+The game is served by GitHub Pages from the `gh-pages` branch. To redeploy:
+
+```bash
+pnpm build
+# publish dist/ as the gh-pages branch (orphan history, .nojekyll included)
+git worktree add /tmp/gh-pages gh-pages
+rm -rf /tmp/gh-pages/* && cp -r dist/* /tmp/gh-pages/ && touch /tmp/gh-pages/.nojekyll
+git -C /tmp/gh-pages add -A && git -C /tmp/gh-pages commit -m "Deploy" && git -C /tmp/gh-pages push origin gh-pages
+git worktree remove /tmp/gh-pages
+```
+
+The build uses relative asset paths (`base: './'` in `vite.config.js`), so it
+works from any subpath.
