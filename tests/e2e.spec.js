@@ -96,6 +96,65 @@ test('falling off the island respawns the player', async ({ page }) => {
   expect(Math.abs(pos.y - g)).toBeLessThan(3);
 });
 
+// Steer the player through waypoints by aiming the camera and holding W —
+// a real playthrough, no teleports. Forward with mz=-1 is (sin yaw, -cos yaw).
+async function walkTo(page, waypoints, { run = true, timeout = 100000 } = {}) {
+  await page.keyboard.down('w');
+  if (run) await page.keyboard.down('Shift');
+  const deadline = Date.now() + timeout;
+  let i = 0;
+  let last = null;
+  let stall = 0;
+  while (i < waypoints.length) {
+    if (Date.now() > deadline) throw new Error(`walkTo timed out heading to ${waypoints[i]}`);
+    const [x, z] = waypoints[i];
+    const p = await page.evaluate(() => window.__game.playerPos);
+    // fell off and respawned? start the route over from the beginning
+    if (last && Math.hypot(p.x - last.x, p.z - last.z) > 30) i = 0;
+    const dx = x - p.x;
+    const dz = z - p.z;
+    if (Math.hypot(dx, dz) < 2.5) {
+      i++;
+      stall = 0;
+      last = p;
+      continue;
+    }
+    // hop over whatever we're wedged against
+    if (last && Math.hypot(p.x - last.x, p.z - last.z) < 0.05) {
+      if (++stall > 8) {
+        await page.keyboard.press('Space');
+        stall = 0;
+      }
+    } else {
+      stall = 0;
+    }
+    last = p;
+    await page.evaluate((yaw) => window.__game.setYaw(yaw), Math.atan2(dx, -dz));
+    await page.waitForTimeout(120);
+  }
+  if (run) await page.keyboard.up('Shift');
+  await page.keyboard.up('w');
+}
+
+test('walks from spawn across a bridge to a satellite island (no teleports)', async ({ page }) => {
+  test.setTimeout(120000);
+  await boot(page);
+  await startSettled(page);
+  // route: spawn -> west meadow -> west bridge -> satellite island
+  await walkTo(page, [
+    [0, 30],
+    [-30, 2],
+    [-49, -17.5], // bridge mouth on the main island
+    [-74, -26.5], // bridge end on the satellite
+    [-88, -31],
+  ]);
+  const pos = await page.evaluate(() => window.__game.playerPos);
+  expect(Math.hypot(pos.x + 88, pos.z + 31)).toBeLessThan(5);
+  // standing on the satellite island, not fallen into the void
+  expect(pos.y).toBeGreaterThan(0);
+  expect(await page.evaluate(() => window.__game.grounded)).toBe(true);
+});
+
 test('bridges are walkable ground', async ({ page }) => {
   await boot(page);
   await page.evaluate(() => window.__game.start());

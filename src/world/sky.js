@@ -175,7 +175,7 @@ export class Sky {
 
     this.sun.position.copy(playerPos).addScaledVector(lightDir, 150);
     this.sun.target.position.copy(playerPos);
-    this.sun.intensity = isDay ? lerp(0.35, 2.4, dayF) : 0.7;
+    this.sun.intensity = isDay ? lerp(0.35, 2.4, dayF) : 0.9;
     this.sun.color.set(isDay ? mix3('sun') : new THREE.Color(0x8fa5e8));
 
     this.hemi.color.copy(mix3('hemiSky'));
