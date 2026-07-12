@@ -179,5 +179,43 @@ export function buildCastle({ x, z, groundY }) {
 
   const group = new THREE.Group();
   group.add(mesh, winMesh);
-  return { group, colliders, windowsMaterial };
+
+  // gate torches: two flame sprites + one shared flickering light
+  const flameTex = makeFlameTexture();
+  const flames = [];
+  for (const side of [-1, 1]) {
+    const fm = new THREE.SpriteMaterial({ map: flameTex, color: 0xffc27a, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false });
+    const flame = new THREE.Sprite(fm);
+    flame.position.set(x + side * (gateW / 2 + 0.6), y0 + 3.4, z + half + 0.9);
+    flame.scale.set(0.7, 1.1, 1);
+    group.add(flame);
+    flames.push(flame);
+    const bracket = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 0.7, 5), new THREE.MeshStandardMaterial({ color: 0x3a3f4a, flatShading: true }));
+    bracket.position.set(x + side * (gateW / 2 + 0.6), y0 + 2.95, z + half + 0.9);
+    group.add(bracket);
+  }
+  const torchLight = new THREE.PointLight(0xff9a45, 0, 26, 1.8);
+  torchLight.position.set(x, y0 + 3.6, z + half + 1.6);
+  group.add(torchLight);
+
+  return { group, colliders, windowsMaterial, torchLight, flames };
+}
+
+let _flameTex = null;
+function makeFlameTexture() {
+  if (_flameTex) return _flameTex;
+  const w = 32, h = 48;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  const grad = ctx.createRadialGradient(w / 2, h * 0.65, 2, w / 2, h * 0.55, h * 0.5);
+  grad.addColorStop(0, 'rgba(255,240,180,1)');
+  grad.addColorStop(0.35, 'rgba(255,160,60,0.85)');
+  grad.addColorStop(0.75, 'rgba(230,80,30,0.35)');
+  grad.addColorStop(1, 'rgba(200,60,20,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, w, h);
+  _flameTex = new THREE.CanvasTexture(canvas);
+  return _flameTex;
 }

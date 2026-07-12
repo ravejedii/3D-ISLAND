@@ -1,4 +1,8 @@
 import * as THREE from 'three';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { World } from './world/world.js';
 import { Player } from './player/controller.js';
 import { ThirdPersonCamera } from './player/camera.js';
@@ -26,7 +30,7 @@ const renderer = new THREE.WebGLRenderer({ canvas, antialias: !softwareGL, power
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
 renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
-renderer.shadowMap.type = THREE.PCFShadowMap;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
 renderer.toneMappingExposure = 1.05;
 
@@ -34,6 +38,16 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 2000);
 
 const world = new World(scene);
+
+// bloom post-processing: only worth it on real GPUs at the top quality level
+// (?bloom forces it on software GL so headless screenshots can verify it)
+let composer = null;
+if (!softwareGL || new URLSearchParams(location.search).has('bloom')) {
+  composer = new EffectComposer(renderer);
+  composer.addPass(new RenderPass(scene, camera));
+  composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.32, 0.55, 0.82));
+  composer.addPass(new OutputPass());
+}
 const player = new Player(world);
 scene.add(player.group);
 const tpCamera = new ThirdPersonCamera(camera, world);
@@ -96,11 +110,10 @@ function lockPointer() {
 function startGame() {
   audio.init();
   crystalsCollected = 0;
-  for (const c of world.crystals) {
+  world.crystals.forEach((c, i) => {
     c.collected = false;
-    c.mesh.visible = true;
-    c.sprite.visible = true;
-  }
+    world.crystalField.setCollected(i, false, c);
+  });
   hud.setCrystals(0, world.crystals.length);
   player.position.copy(world.spawn);
   player.velocity.set(0, 0, 0);
@@ -138,20 +151,22 @@ player.onLand = () => audio.land();
 
 // ---------- crystal pickup ----------
 const burst = makeBurst(scene);
+const burstAt = new THREE.Vector3();
 function checkPickups() {
-  for (const c of world.crystals) {
+  for (let i = 0; i < world.crystals.length; i++) {
+    const c = world.crystals[i];
     if (c.collected) continue;
-    const dx = player.position.x - c.mesh.position.x;
-    const dy = player.position.y + 1 - c.mesh.position.y;
-    const dz = player.position.z - c.mesh.position.z;
+    const dx = player.position.x - c.x;
+    const dy = player.position.y + 1 - c.baseY;
+    const dz = player.position.z - c.z;
     if (dx * dx + dy * dy + dz * dz < 2.4 * 2.4) {
       c.collected = true;
-      c.mesh.visible = false;
-      c.sprite.visible = false;
+      world.crystalField.setCollected(i, true, c);
       crystalsCollected++;
       hud.setCrystals(crystalsCollected, world.crystals.length);
       audio.pickup(crystalsCollected);
-      burst.fire(c.mesh.position, c.mesh.material.color);
+      burstAt.set(c.x, c.baseY, c.z);
+      burst.fire(burstAt, c.color);
       if (crystalsCollected >= world.crystals.length) {
         const secs = Math.round((performance.now() - playStartTime) / 1000);
         hud.setWinStats(`All ${world.crystals.length} crystals · ${Math.floor(secs / 60)}m ${secs % 60}s`);
@@ -214,6 +229,7 @@ window.addEventListener('resize', () => {
   camera.aspect = window.innerWidth / window.innerHeight;
   camera.updateProjectionMatrix();
   renderer.setSize(window.innerWidth, window.innerHeight);
+  if (composer) composer.setSize(window.innerWidth, window.innerHeight);
 });
 
 // ---------- title-screen cinematic camera ----------
@@ -247,6 +263,10 @@ function applyQuality(i) {
   const q = qualityLevels[i];
   renderer.setPixelRatio(q.pixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
+  if (composer) {
+    composer.setPixelRatio(q.pixelRatio);
+    composer.setSize(window.innerWidth, window.innerHeight);
+  }
   renderer.shadowMap.enabled = q.shadows;
   world.sky.sun.castShadow = q.shadows;
   if (q.shadows) {
@@ -322,7 +342,11 @@ function tick() {
   }
   burst.update(dt);
 
-  renderer.render(scene, camera);
+  if (composer && qualityIndex === 0) {
+    composer.render();
+  } else {
+    renderer.render(scene, camera);
+  }
   requestAnimationFrame(tick);
 }
 requestAnimationFrame(tick);
@@ -347,7 +371,7 @@ window.__game = {
   },
   setYaw(y) { tpCamera.yaw = y; },
   setTimeOfDay(t) { world.sky.setTime(t); },
-  crystalPositions() { return world.crystals.map((c) => ({ x: c.mesh.position.x, y: c.baseY, z: c.mesh.position.z, collected: c.collected })); },
+  crystalPositions() { return world.crystals.map((c) => ({ x: c.x, y: c.baseY, z: c.z, collected: c.collected })); },
   groundHeight(x, z) { return world.groundHeight(x, z); },
   drawCalls() { return renderer.info.render.calls; },
   triangles() { return renderer.info.render.triangles; },

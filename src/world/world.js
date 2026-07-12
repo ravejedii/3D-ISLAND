@@ -6,6 +6,7 @@ import { buildCastle } from './castle.js';
 import { buildProps } from './props.js';
 import { Sky } from './sky.js';
 import { buildPond, buildWaterfall } from './water.js';
+import { Ambient } from './ambient.js';
 import { RNG } from '../core/rng.js';
 
 const SEED = 20260712;
@@ -81,6 +82,8 @@ export class World {
     scene.add(castle.group);
     this.colliders.push(...castle.colliders);
     this.windowsMaterial = castle.windowsMaterial;
+    this.torchLight = castle.torchLight;
+    this.torchFlames = castle.flames;
 
     // --- pond + waterfalls ---
     const pondY = this.main.heightAt(18, 26) + 0.55;
@@ -98,7 +101,7 @@ export class World {
       const fz = isl.center.z + Math.sin(angle) * isl.radius * 0.97;
       const fall = buildWaterfall({ x: fx, y: isl.center.y + 0.6, z: fz, angle: -angle + Math.PI / 2, width: 4.2, height: 34 });
       scene.add(fall.mesh);
-      this.updatables.push((dt, t) => (fall.uniforms.uTime.value = t));
+      this.updatables.push((dt, t) => fall.update(t));
     }
 
     // --- props (keep clear of castle, pond, bridge mouths, spawn) ---
@@ -115,12 +118,16 @@ export class World {
     const props = buildProps(this.islands, { seed: SEED + 99, exclude });
     scene.add(props.group);
     this.colliders.push(...props.colliders);
+    this.updatables.push((dt, t) => (props.windTime.value = t));
 
     // --- crystals ---
     this.crystals = this.buildCrystals();
 
     // --- sky ---
     this.sky = new Sky(scene);
+
+    // --- ambient life: fireflies, pollen, birds ---
+    this.ambient = new Ambient(scene, this);
 
     this.spawn = new THREE.Vector3(0, this.main.heightAt(0, 44) + 2, 44);
   }
@@ -140,37 +147,16 @@ export class World {
       { isl: this.satellites[2], a: 5.1, f: 0.66 },
       { isl: this.satellites[3], a: 1.9, f: 0.4 },
     ];
-    const geo = new THREE.OctahedronGeometry(0.55, 0);
-    geo.scale(1, 1.8, 1);
     const crystals = [];
-    const group = new THREE.Group();
-    const spriteMap = makeGlowTexture();
-    for (let i = 0; i < spots.length; i++) {
-      const s = spots[i];
+    for (const s of spots) {
       const x = s.x !== undefined ? s.x : s.isl.center.x + Math.cos(s.a) * s.isl.radius * s.f;
       const z = s.z !== undefined ? s.z : s.isl.center.z + Math.sin(s.a) * s.isl.radius * s.f;
       const y = s.isl.heightAt(x, z) + 1.25;
       const hue = 0.48 + rng.range(-0.1, 0.22);
       const color = new THREE.Color().setHSL(hue, 0.85, 0.6);
-      const mat = new THREE.MeshStandardMaterial({
-        color,
-        emissive: color,
-        emissiveIntensity: 0.9,
-        roughness: 0.25,
-        metalness: 0.1,
-        transparent: true,
-        opacity: 0.92,
-      });
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.position.set(x, y, z);
-      const sprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: spriteMap, color, transparent: true, opacity: 0.5, blending: THREE.AdditiveBlending, depthWrite: false }));
-      sprite.scale.setScalar(3.2);
-      sprite.position.copy(mesh.position);
-      group.add(mesh, sprite);
-      crystals.push({ mesh, sprite, baseY: y, collected: false, phase: rng.range(0, Math.PI * 2) });
+      crystals.push({ x, z, baseY: y, groundY: s.isl.heightAt(x, z), color, collected: false, phase: rng.range(0, Math.PI * 2) });
     }
-    this.scene.add(group);
-    this.crystalGroup = group;
+    this.crystalField = new CrystalField(this.scene, crystals);
     return crystals;
   }
 
@@ -199,15 +185,111 @@ export class World {
   update(dt, elapsed, playerPos) {
     this.sky.update(dt, playerPos);
     for (const u of this.updatables) u(dt, elapsed);
-    if (this.windowsMaterial) this.windowsMaterial.emissiveIntensity = this.sky.nightFactor * 2.2;
-    for (const c of this.crystals) {
-      if (c.collected) continue;
-      c.mesh.rotation.y += dt * 1.2;
-      const bob = Math.sin(elapsed * 1.6 + c.phase) * 0.25;
-      c.mesh.position.y = c.baseY + bob;
-      c.sprite.position.y = c.mesh.position.y;
-      c.sprite.material.opacity = 0.35 + 0.2 * Math.sin(elapsed * 2.2 + c.phase);
+    const nightF = this.sky.nightFactor;
+    if (this.windowsMaterial) this.windowsMaterial.emissiveIntensity = nightF * 2.2;
+    if (this.torchLight) {
+      const flicker = 0.86 + 0.09 * Math.sin(elapsed * 13) + 0.05 * Math.sin(elapsed * 29 + 1.7);
+      this.torchLight.intensity = (2 + nightF * 26) * flicker;
+      for (const f of this.torchFlames) {
+        f.scale.set(0.62 + 0.1 * Math.sin(elapsed * 11 + f.position.x), 1.0 + 0.16 * flicker, 1);
+      }
     }
+    this.ambient.update(dt, elapsed, nightF);
+    this.crystalField.update(elapsed, this.crystals);
+  }
+}
+
+// All 10 crystals in 4 draw calls: instanced shells/cores/rings + one glow Points.
+class CrystalField {
+  constructor(scene, crystals) {
+    const n = crystals.length;
+    const shellGeo = new THREE.OctahedronGeometry(0.55, 0);
+    shellGeo.scale(1, 1.8, 1);
+    const coreGeo = new THREE.OctahedronGeometry(0.26, 0);
+    coreGeo.scale(1, 1.9, 1);
+    const ringGeo = new THREE.RingGeometry(0.55, 1.05, 24);
+    ringGeo.rotateX(-Math.PI / 2);
+
+    this.shells = new THREE.InstancedMesh(shellGeo, new THREE.MeshStandardMaterial({
+      color: 0xffffff, roughness: 0.2, metalness: 0.1, transparent: true, opacity: 0.55,
+      emissive: 0xffffff, emissiveIntensity: 0.35, depthWrite: false,
+    }), n);
+    this.cores = new THREE.InstancedMesh(coreGeo, new THREE.MeshBasicMaterial({ color: 0xffffff }), n);
+    this.rings = new THREE.InstancedMesh(ringGeo, new THREE.MeshBasicMaterial({
+      color: 0xffffff, transparent: true, opacity: 0.4, blending: THREE.AdditiveBlending,
+      depthWrite: false, side: THREE.DoubleSide,
+    }), n);
+
+    const glowGeo = new THREE.BufferGeometry();
+    this.glowPos = new Float32Array(n * 3);
+    const glowCol = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      const c = crystals[i];
+      this.glowPos.set([c.x, c.baseY, c.z], i * 3);
+      glowCol.set([c.color.r, c.color.g, c.color.b], i * 3);
+      this.shells.setColorAt(i, c.color);
+      this.cores.setColorAt(i, new THREE.Color().copy(c.color).lerp(new THREE.Color(0xffffff), 0.65));
+      this.rings.setColorAt(i, c.color);
+    }
+    glowGeo.setAttribute('position', new THREE.BufferAttribute(this.glowPos, 3));
+    glowGeo.setAttribute('color', new THREE.BufferAttribute(glowCol, 3));
+    this.glow = new THREE.Points(glowGeo, new THREE.PointsMaterial({
+      map: makeGlowTexture(), vertexColors: true, size: 3.4, transparent: true, opacity: 0.55,
+      blending: THREE.AdditiveBlending, depthWrite: false, sizeAttenuation: true,
+    }));
+    this.glow.frustumCulled = false;
+
+    for (const m of [this.shells, this.cores, this.rings]) {
+      m.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      m.frustumCulled = false;
+    }
+    scene.add(this.shells, this.cores, this.rings, this.glow);
+    this._dummy = new THREE.Object3D();
+  }
+
+  update(elapsed, crystals) {
+    const d = this._dummy;
+    for (let i = 0; i < crystals.length; i++) {
+      const c = crystals[i];
+      if (c.collected) continue;
+      const bob = Math.sin(elapsed * 1.6 + c.phase) * 0.25;
+      const y = c.baseY + bob;
+      d.position.set(c.x, y, c.z);
+      d.rotation.set(0, elapsed * 1.2 + c.phase, 0);
+      d.scale.setScalar(1);
+      d.updateMatrix();
+      this.shells.setMatrixAt(i, d.matrix);
+      d.rotation.y = -elapsed * 2.1 + c.phase;
+      d.updateMatrix();
+      this.cores.setMatrixAt(i, d.matrix);
+      const pulse = 0.85 + 0.2 * Math.sin(elapsed * 2.2 + c.phase);
+      d.position.set(c.x, c.groundY + 0.06, c.z);
+      d.rotation.set(0, 0, 0);
+      d.scale.setScalar(pulse);
+      d.updateMatrix();
+      this.rings.setMatrixAt(i, d.matrix);
+      this.glowPos[i * 3 + 1] = y;
+    }
+    this.shells.instanceMatrix.needsUpdate = true;
+    this.cores.instanceMatrix.needsUpdate = true;
+    this.rings.instanceMatrix.needsUpdate = true;
+    this.glow.geometry.attributes.position.needsUpdate = true;
+  }
+
+  setCollected(i, collected, crystal) {
+    const d = this._dummy;
+    d.position.set(crystal.x, collected ? -999 : crystal.baseY, crystal.z);
+    d.rotation.set(0, 0, 0);
+    d.scale.setScalar(collected ? 0.0001 : 1);
+    d.updateMatrix();
+    this.shells.setMatrixAt(i, d.matrix);
+    this.cores.setMatrixAt(i, d.matrix);
+    this.rings.setMatrixAt(i, d.matrix);
+    this.glowPos[i * 3 + 1] = collected ? -999 : crystal.baseY;
+    this.shells.instanceMatrix.needsUpdate = true;
+    this.cores.instanceMatrix.needsUpdate = true;
+    this.rings.instanceMatrix.needsUpdate = true;
+    this.glow.geometry.attributes.position.needsUpdate = true;
   }
 }
 

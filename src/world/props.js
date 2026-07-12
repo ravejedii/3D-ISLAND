@@ -85,12 +85,13 @@ export function buildProps(islands, { seed = 909, exclude }) {
   const rng = new RNG(seed);
   const group = new THREE.Group();
   const colliders = [];
+  const windTime = { value: 0 };
 
   const defs = [
-    { geo: pineGeometry(), per: (isl) => Math.round(isl.radius * 0.55), scale: [0.8, 1.7], tint: [0x9adf8a, 0x5d8a52], collideR: 0.4, maxSlope: 0.4, shadow: true },
+    { geo: pineGeometry(), per: (isl) => Math.round(isl.radius * 0.55), scale: [0.8, 1.7], tint: [0x9adf8a, 0x5d8a52], collideR: 0.4, maxSlope: 0.4, shadow: true, sway: 0.05 },
     { geo: rockGeometry(), per: (isl) => Math.round(isl.radius * 0.22), scale: [0.4, 1.5], tint: [0xb9b6ae, 0x74716b], collideR: 1.0, maxSlope: 0.6, shadow: true },
-    { geo: grassGeometry(), per: (isl) => Math.round(isl.radius * 1.6), scale: [0.7, 1.5], tint: [0xd0ff9e, 0x7fbf62], collideR: 0, maxSlope: 0.5, shadow: false },
-    { geo: flowerGeometry(), per: (isl) => Math.round(isl.radius * 0.4), scale: [0.8, 1.3], tint: [0xff8ab5, 0x9e6bff, 0xffd166, 0xff6b6b], collideR: 0, maxSlope: 0.45, shadow: false, palette: true },
+    { geo: grassGeometry(), per: (isl) => Math.round(isl.radius * 1.6), scale: [0.7, 1.5], tint: [0xd0ff9e, 0x7fbf62], collideR: 0, maxSlope: 0.5, shadow: false, sway: 0.35 },
+    { geo: flowerGeometry(), per: (isl) => Math.round(isl.radius * 0.4), scale: [0.8, 1.3], tint: [0xff8ab5, 0x9e6bff, 0xffd166, 0xff6b6b], collideR: 0, maxSlope: 0.45, shadow: false, palette: true, sway: 0.25 },
   ];
 
   const dummy = new THREE.Object3D();
@@ -106,6 +107,24 @@ export function buildProps(islands, { seed = 909, exclude }) {
     }
     if (!placements.length) continue;
     const mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 });
+    if (def.sway) {
+      // wind: vertices lean by height, phase varies per instance position
+      const sway = def.sway;
+      mat.onBeforeCompile = (shader) => {
+        shader.uniforms.uWindTime = windTime;
+        shader.uniforms.uSway = { value: sway };
+        shader.vertexShader = shader.vertexShader
+          .replace('#include <common>', '#include <common>\nuniform float uWindTime;\nuniform float uSway;')
+          .replace('#include <begin_vertex>', `#include <begin_vertex>
+            {
+              float phase = uWindTime * 1.7 + instanceMatrix[3][0] * 0.37 + instanceMatrix[3][2] * 0.43;
+              float amt = pow(max(position.y, 0.0) * 0.3, 1.4) * uSway;
+              transformed.x += sin(phase) * amt;
+              transformed.z += cos(phase * 0.83) * amt * 0.7;
+            }`);
+      };
+      mat.customProgramCacheKey = () => 'wind-sway';
+    }
     const mesh = new THREE.InstancedMesh(def.geo, mat, placements.length);
     mesh.castShadow = def.shadow;
     mesh.receiveShadow = false;
@@ -134,5 +153,5 @@ export function buildProps(islands, { seed = 909, exclude }) {
     group.add(mesh);
   }
 
-  return { group, colliders };
+  return { group, colliders, windTime };
 }

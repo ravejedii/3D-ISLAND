@@ -25,6 +25,8 @@ export class Sky {
       sunDir: { value: new THREE.Vector3(0, 1, 0) },
       sunColor: { value: new THREE.Color(PAL.day.sun) },
       sunGlow: { value: 1 },
+      duskGlow: { value: 0 },
+      duskColor: { value: new THREE.Color(0xff8a4a) },
     };
     const domeMat = new THREE.ShaderMaterial({
       side: THREE.BackSide,
@@ -47,12 +49,18 @@ export class Sky {
         uniform vec3 sunDir;
         uniform vec3 sunColor;
         uniform float sunGlow;
+        uniform float duskGlow;
+        uniform vec3 duskColor;
         void main() {
           float h = clamp(vDir.y, 0.0, 1.0);
           vec3 col = mix(horizonColor, topColor, pow(h, 0.62));
           float sunDot = clamp(dot(vDir, sunDir), 0.0, 1.0);
           col += sunColor * pow(sunDot, 220.0) * 1.6 * sunGlow;      // disc
           col += sunColor * pow(sunDot, 6.0) * 0.22 * sunGlow;       // halo
+          // warm band hugging the horizon at dawn/dusk, strongest sunward
+          float band = exp(-abs(vDir.y) * 7.0);
+          float sunward = 0.35 + 0.65 * pow(clamp(dot(normalize(vec3(vDir.x, 0.0, vDir.z)), normalize(vec3(sunDir.x, 0.0, sunDir.z))), 0.0, 1.0), 2.0);
+          col += duskColor * band * sunward * duskGlow;
           gl_FragColor = vec4(col, 1.0);
         }
       `,
@@ -129,6 +137,12 @@ export class Sky {
     this.clouds.frustumCulled = false;
     scene.add(this.clouds);
 
+    // moon: soft-shaded disc sprite, only visible at night
+    this.moonMat = new THREE.SpriteMaterial({ map: makeMoonTexture(), transparent: true, opacity: 0, fog: false, depthWrite: false });
+    this.moon = new THREE.Sprite(this.moonMat);
+    this.moon.scale.setScalar(110);
+    scene.add(this.moon);
+
     scene.fog = new THREE.Fog(PAL.day.fog, 120, 620);
 
     this._dummy = dummy;
@@ -166,7 +180,8 @@ export class Sky {
     this.uniforms.topColor.value.copy(mix3('top'));
     this.uniforms.horizonColor.value.copy(mix3('horizon'));
     this.uniforms.sunColor.value.copy(mix3('sun'));
-    this.uniforms.sunGlow.value = sunEl > -0.12 ? 1 : 0.35; // moon disc dimmer
+    this.uniforms.sunGlow.value = sunEl > -0.12 ? 1 : 0; // the moon sprite takes over at night
+    this.uniforms.duskGlow.value = sunsetF * 0.55;
 
     // when the sun sets, the "sun" light becomes the moon (opposite side)
     const isDay = sunEl > -0.04;
@@ -201,7 +216,43 @@ export class Sky {
     }
     this.clouds.instanceMatrix.needsUpdate = true;
 
+    // moon rides opposite the sun, fading in as night falls
+    this.moon.position.copy(playerPos).addScaledVector(sunDir, -820);
+    this.moonMat.opacity = clamp(nightF - 0.15, 0, 1);
+
     this.dome.position.copy(playerPos);
     this.stars.position.set(playerPos.x, 0, playerPos.z);
   }
+}
+
+function makeMoonTexture() {
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  const c = size / 2;
+  const r = size * 0.32;
+  // outer glow
+  let grad = ctx.createRadialGradient(c, c, r * 0.6, c, c, size / 2);
+  grad.addColorStop(0, 'rgba(210,225,255,0.5)');
+  grad.addColorStop(1, 'rgba(210,225,255,0)');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, size, size);
+  // disc, lit from the upper left
+  grad = ctx.createRadialGradient(c - r * 0.35, c - r * 0.35, r * 0.1, c, c, r);
+  grad.addColorStop(0, '#f4f7ff');
+  grad.addColorStop(0.75, '#cdd8f0');
+  grad.addColorStop(1, '#9aa8c8');
+  ctx.fillStyle = grad;
+  ctx.beginPath();
+  ctx.arc(c, c, r, 0, Math.PI * 2);
+  ctx.fill();
+  // a few craters
+  ctx.fillStyle = 'rgba(150,165,200,0.55)';
+  for (const [ox, oy, cr] of [[-0.3, 0.15, 0.16], [0.25, -0.2, 0.12], [0.1, 0.3, 0.09], [-0.05, -0.35, 0.07]]) {
+    ctx.beginPath();
+    ctx.arc(c + ox * r, c + oy * r, cr * r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  return new THREE.CanvasTexture(canvas);
 }

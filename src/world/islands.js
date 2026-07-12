@@ -165,7 +165,20 @@ export class Island {
     const slope = this.slopeAt(x, z);
     const n = fbm(x * 0.11 + 40, z * 0.11 - 17, this.seed + 5, 3);
     out.copy(pal.grass).lerp(pal.grassDark, clamp(n * 0.5 + 0.5, 0, 1));
+    // warm meadow patches so the grass reads less uniform
+    const meadow = fbm(x * 0.028 - 90, z * 0.028 + 55, this.seed + 11, 2);
+    if (meadow > 0.1) out.lerp(new THREE.Color(0x8fb54e), clamp((meadow - 0.1) * 2.2, 0, 0.55));
     if (n > 0.42) out.lerp(pal.dirt, 0.55);
+    // cheap baked AO: darken concavities (height below the local average)
+    const e = 2.6;
+    const h0 = this.heightAt(x, z);
+    if (isFinite(h0)) {
+      const avg = (this.heightAt(x + e, z) + this.heightAt(x - e, z) + this.heightAt(x, z + e) + this.heightAt(x, z - e)) / 4;
+      if (isFinite(avg)) {
+        const cavity = clamp((avg - h0) * 0.55, 0, 0.35);
+        out.multiplyScalar(1 - cavity);
+      }
+    }
     if (isFinite(slope) && slope > 0.38) out.lerp(pal.stone, clamp((slope - 0.38) * 2.2, 0, 1));
     if (t > 0.86) out.lerp(pal.rimRock, smoothstep(0.86, 1.0, t));
     if (this.pond) {
