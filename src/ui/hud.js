@@ -6,7 +6,10 @@ export class HUD {
     root.innerHTML = `
       <div class="vignette"></div>
       <div class="hud hidden" id="hud">
-        <div class="crystal-counter"><span class="gem"></span><span id="crystal-count">0 / 10</span></div>
+        <div class="crystal-counter">
+          <div class="counter-row"><span class="gem"></span><span id="crystal-count">0 / 10</span></div>
+          <div class="progress"><div class="progress-fill" id="crystal-progress"></div></div>
+        </div>
         <div class="fps" id="fps">-- FPS</div>
         <div class="compass"><div class="compass-strip" id="compass-strip"></div></div>
         <div class="hints"><b>WASD</b> move &nbsp;·&nbsp; <b>Shift</b> run &nbsp;·&nbsp; <b>Space</b> jump &nbsp;·&nbsp; <b>Mouse</b> look &nbsp;·&nbsp; <b>Esc</b> pause</div>
@@ -75,6 +78,8 @@ export class HUD {
 
   setCrystals(n, total) {
     this.crystalCount.textContent = `${n} / ${total}`;
+    const fill = this.root.querySelector('#crystal-progress');
+    if (fill) fill.style.width = `${(n / total) * 100}%`;
   }
 
   setFPS(fps) {

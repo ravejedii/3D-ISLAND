@@ -1,12 +1,20 @@
+import '@fontsource/manrope/400.css';
+import '@fontsource/manrope/600.css';
+import '@fontsource/manrope/800.css';
+import '@fontsource/cinzel/700.css';
+import '@fontsource/cinzel/900.css';
 import * as THREE from 'three';
-import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
-import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
-import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
-import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import {
+  EffectComposer, RenderPass, EffectPass,
+  BloomEffect, SMAAEffect, VignetteEffect, HueSaturationEffect,
+  BrightnessContrastEffect, ToneMappingEffect, ToneMappingMode,
+} from 'postprocessing';
+import { N8AOPostPass } from 'n8ao';
 import { World } from './world/world.js';
 import { Player } from './player/controller.js';
 import { ThirdPersonCamera } from './player/camera.js';
 import { HUD } from './ui/hud.js';
+import { TouchControls, detectMobile } from './ui/touch.js';
 import { GameAudio } from './audio.js';
 
 const canvas = document.getElementById('game-canvas');
@@ -39,14 +47,36 @@ const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerH
 
 const world = new World(scene);
 
-// bloom post-processing: only worth it on real GPUs at the top quality level
-// (?bloom forces it on software GL so headless screenshots can verify it)
+// post-processing (pmndrs `postprocessing` + n8ao): SSAO, bloom, SMAA,
+// vignette, and a light grade. Runs at quality 0-1 on hardware GL only.
+// (?fx forces it on software GL so headless screenshots can verify it.)
 let composer = null;
-if (!softwareGL || new URLSearchParams(location.search).has('bloom')) {
-  composer = new EffectComposer(renderer);
+let composerActive = false;
+if (!softwareGL || new URLSearchParams(location.search).has('fx')) {
+  composer = new EffectComposer(renderer, { frameBufferType: THREE.HalfFloatType });
   composer.addPass(new RenderPass(scene, camera));
-  composer.addPass(new UnrealBloomPass(new THREE.Vector2(window.innerWidth, window.innerHeight), 0.32, 0.55, 0.82));
-  composer.addPass(new OutputPass());
+  const n8ao = new N8AOPostPass(scene, camera, window.innerWidth, window.innerHeight);
+  n8ao.configuration.aoRadius = 2.2;
+  n8ao.configuration.intensity = 2.6;
+  n8ao.configuration.distanceFalloff = 0.6;
+  n8ao.setQualityMode('Medium');
+  composer.addPass(n8ao);
+  composer.addPass(new EffectPass(
+    camera,
+    new BloomEffect({ intensity: 0.5, luminanceThreshold: 0.72, luminanceSmoothing: 0.2, mipmapBlur: true }),
+    new HueSaturationEffect({ saturation: 0.14 }),
+    new BrightnessContrastEffect({ contrast: 0.07 }),
+    new VignetteEffect({ offset: 0.28, darkness: 0.5 }),
+    new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC }),
+    new SMAAEffect(),
+  ));
+}
+
+// Tone mapping lives in the effect chain when the composer runs, and on the
+// renderer when it doesn't — setComposerActive keeps them mutually exclusive.
+function setComposerActive(active) {
+  composerActive = active;
+  renderer.toneMapping = active ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
 }
 const player = new Player(world);
 scene.add(player.group);
@@ -55,7 +85,9 @@ const hud = new HUD(document.getElementById('ui-root'));
 const audio = new GameAudio();
 
 // ---------- input ----------
-const input = { forward: false, back: false, left: false, right: false, run: false, jump: false };
+const input = { forward: false, back: false, left: false, right: false, run: false, jump: false, moveX: 0, moveZ: 0 };
+const isMobile = detectMobile();
+if (isMobile) document.body.classList.add('touch-mode');
 const keyMap = {
   KeyW: 'forward', ArrowUp: 'forward',
   KeyS: 'back', ArrowDown: 'back',
@@ -97,9 +129,14 @@ let pointerWanted = false;
 function setState(next) {
   state = next;
   hud.show(next === 'playing' ? 'game' : next === 'paused' ? 'pause' : next);
+  if (touch) {
+    if (next === 'playing') touch.show();
+    else touch.hide();
+  }
 }
 
 function lockPointer() {
+  if (isMobile) return; // touch look needs no pointer lock
   pointerWanted = true;
   if (!document.pointerLockElement && canvas.requestPointerLock) {
     const p = canvas.requestPointerLock();
@@ -131,6 +168,13 @@ function resumeGame() {
 hud.onPlay(startGame);
 hud.onResume(resumeGame);
 hud.onAgain(startGame);
+
+const touch = isMobile
+  ? new TouchControls(document.getElementById('ui-root'), input, tpCamera, {
+      onJump: () => {},
+      onPause: () => setState('paused'),
+    })
+  : null;
 
 document.addEventListener('pointerlockchange', () => {
   if (!document.pointerLockElement && state === 'playing' && pointerWanted) {
@@ -264,9 +308,9 @@ function applyQuality(i) {
   renderer.setPixelRatio(q.pixelRatio);
   renderer.setSize(window.innerWidth, window.innerHeight);
   if (composer) {
-    composer.setPixelRatio(q.pixelRatio);
-    composer.setSize(window.innerWidth, window.innerHeight);
+    composer.setSize(window.innerWidth, window.innerHeight); // re-reads pixel ratio
   }
+  setComposerActive(!!composer && i <= 1);
   renderer.shadowMap.enabled = q.shadows;
   world.sky.sun.castShadow = q.shadows;
   if (q.shadows) {
@@ -307,6 +351,11 @@ let elapsed = 0;
 renderer.compile(scene, camera);
 
 if (softwareGL) applyQuality(qualityLevels.length - 1);
+else setComposerActive(!!composer && qualityIndex <= 1);
+
+// image-based lighting: the sky dome becomes the environment map, refreshed
+// as the day-night cycle moves (cheap: a few times per minute)
+if (!softwareGL) world.sky.initEnvironment(renderer, scene);
 
 function tick() {
   const rawDt = clock.getDelta();
@@ -342,14 +391,23 @@ function tick() {
   }
   burst.update(dt);
 
-  if (composer && qualityIndex === 0) {
-    composer.render();
+  if (composerActive) {
+    composer.render(dt);
   } else {
     renderer.render(scene, camera);
   }
   requestAnimationFrame(tick);
 }
 requestAnimationFrame(tick);
+
+// drop the static loading overlay once the first frame is on screen
+requestAnimationFrame(() => {
+  const loading = document.getElementById('loading');
+  if (loading) {
+    loading.classList.add('done');
+    setTimeout(() => loading.remove(), 650);
+  }
+});
 
 // ---------- test hooks ----------
 window.__game = {
@@ -370,6 +428,8 @@ window.__game = {
     player.velocity.set(0, 0, 0);
   },
   setYaw(y) { tpCamera.yaw = y; },
+  get cameraYaw() { return tpCamera.yaw; },
+  get isMobile() { return isMobile; },
   setTimeOfDay(t) { world.sky.setTime(t); },
   crystalPositions() { return world.crystals.map((c) => ({ x: c.x, y: c.baseY, z: c.z, collected: c.collected })); },
   groundHeight(x, z) { return world.groundHeight(x, z); },

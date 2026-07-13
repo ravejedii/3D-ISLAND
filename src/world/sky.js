@@ -106,36 +106,27 @@ export class Sky {
     this.stars.frustumCulled = false;
     scene.add(this.stars);
 
-    // clouds: instanced squashed icosahedra puffs
-    const puff = new THREE.IcosahedronGeometry(1, 0);
-    this.cloudMat = new THREE.MeshStandardMaterial({ color: 0xffffff, flatShading: true, transparent: true, opacity: 0.92, roughness: 1 });
-    const puffsPerCloud = 5;
-    const cloudCount = 16;
-    this.clouds = new THREE.InstancedMesh(puff, this.cloudMat, cloudCount * puffsPerCloud);
-    this.cloudSeeds = [];
-    const dummy = new THREE.Object3D();
-    let idx = 0;
-    for (let c = 0; c < cloudCount; c++) {
-      const cx = rng.range(-260, 260);
-      const cy = rng.range(46, 90);
-      const cz = rng.range(-260, 260);
-      const speed = rng.range(1.2, 2.6);
-      const scale = rng.range(4, 9);
-      for (let p = 0; p < puffsPerCloud; p++) {
-        const ox = rng.range(-1.2, 1.2) * scale;
-        const oy = rng.range(-0.16, 0.22) * scale;
-        const oz = rng.range(-0.5, 0.5) * scale;
-        const ps = rng.range(0.45, 1) * scale;
-        this.cloudSeeds.push({ cx, cy, cz, ox, oy, oz, ps, speed, idx });
-        dummy.position.set(cx + ox, cy + oy, cz + oz);
-        dummy.scale.set(ps, ps * 0.45, ps * 0.75);
-        dummy.updateMatrix();
-        this.clouds.setMatrixAt(idx++, dummy.matrix);
-      }
+    // clouds: soft billboard sprites (fluffy, painterly — reads far better
+    // than solid low-poly puffs)
+    this.cloudMats = [0, 1].map((v) => new THREE.SpriteMaterial({
+      map: makeCloudTexture(v),
+      transparent: true,
+      opacity: 0.9,
+      depthWrite: false,
+      fog: false,
+      color: 0xffffff,
+    }));
+    this.cloudSprites = [];
+    const cloudGroup = new THREE.Group();
+    for (let c = 0; c < 12; c++) {
+      const sprite = new THREE.Sprite(this.cloudMats[c % 2]);
+      const w = rng.range(38, 70);
+      sprite.scale.set(w, w * rng.range(0.32, 0.42), 1);
+      sprite.position.set(rng.range(-280, 280), rng.range(48, 95), rng.range(-280, 280));
+      cloudGroup.add(sprite);
+      this.cloudSprites.push({ sprite, speed: rng.range(1.1, 2.4) });
     }
-    this.clouds.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
-    this.clouds.frustumCulled = false;
-    scene.add(this.clouds);
+    scene.add(cloudGroup);
 
     // moon: soft-shaded disc sprite, only visible at night
     this.moonMat = new THREE.SpriteMaterial({ map: makeMoonTexture(), transparent: true, opacity: 0, fog: false, depthWrite: false });
@@ -145,13 +136,33 @@ export class Sky {
 
     scene.fog = new THREE.Fog(PAL.day.fog, 120, 620);
 
-    this._dummy = dummy;
     this._colA = new THREE.Color();
     this.nightFactor = 0;
   }
 
   setTime(t) {
     this.time = ((t % 1) + 1) % 1;
+  }
+
+  // Image-based lighting: PMREM-render the sky dome into scene.environment so
+  // materials pick up sky color. Refreshed periodically as the cycle advances.
+  initEnvironment(renderer, scene) {
+    this.pmrem = new THREE.PMREMGenerator(renderer);
+    this.envScene = new THREE.Scene();
+    this.envScene.add(new THREE.Mesh(this.dome.geometry, this.dome.material));
+    this.envTarget = scene;
+    this.envRT = null;
+    this.lastEnvTime = -1;
+    scene.environmentIntensity = 0.45;
+    this.refreshEnvironment();
+  }
+
+  refreshEnvironment() {
+    const old = this.envRT;
+    this.envRT = this.pmrem.fromScene(this.envScene, 0, 1, 1500);
+    this.envTarget.environment = this.envRT.texture;
+    if (old) old.dispose();
+    this.lastEnvTime = this.time;
   }
 
   update(dt, playerPos) {
@@ -202,19 +213,24 @@ export class Sky {
     this.starMat.opacity = clamp(nightF - 0.25, 0, 1) * 1.2;
     this.stars.rotation.y += dt * 0.004;
 
-    this.cloudMat.opacity = lerp(0.5, 0.92, dayF);
-    this.cloudMat.color.copy(new THREE.Color(0xffffff).lerp(new THREE.Color(0x2a3357), nightF * 0.85).lerp(new THREE.Color(0xffc79e), sunsetF * 0.5));
-
-    // drift clouds, wrap around the world
-    for (const s of this.cloudSeeds) {
-      s.cx += s.speed * dt;
-      if (s.cx > 300) s.cx = -300;
-      this._dummy.position.set(s.cx + s.ox, s.cy + s.oy, s.cz + s.oz);
-      this._dummy.scale.set(s.ps, s.ps * 0.45, s.ps * 0.75);
-      this._dummy.updateMatrix();
-      this.clouds.setMatrixAt(s.idx, this._dummy.matrix);
+    const cloudTint = new THREE.Color(0xffffff)
+      .lerp(new THREE.Color(0x39406b), nightF * 0.9)
+      .lerp(new THREE.Color(0xffc79e), sunsetF * 0.55);
+    for (const m of this.cloudMats) {
+      m.opacity = lerp(0.42, 0.9, dayF);
+      m.color.copy(cloudTint);
     }
-    this.clouds.instanceMatrix.needsUpdate = true;
+    // drift clouds, wrap around the world
+    for (const s of this.cloudSprites) {
+      s.sprite.position.x += s.speed * dt;
+      if (s.sprite.position.x > 320) s.sprite.position.x = -320;
+    }
+
+    // refresh the environment map as the light changes
+    if (this.pmrem) {
+      const d = Math.abs(this.time - this.lastEnvTime);
+      if (Math.min(d, 1 - d) > 0.015) this.refreshEnvironment();
+    }
 
     // moon rides opposite the sun, fading in as night falls
     this.moon.position.copy(playerPos).addScaledVector(sunDir, -820);
@@ -223,6 +239,39 @@ export class Sky {
     this.dome.position.copy(playerPos);
     this.stars.position.set(playerPos.x, 0, playerPos.z);
   }
+}
+
+// Painterly cloud texture: layered soft puffs with a flatter base.
+function makeCloudTexture(variant) {
+  const w = 256;
+  const h = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  const rng = new RNG(910 + variant * 37);
+  const puffs = 14;
+  for (let i = 0; i < puffs; i++) {
+    const t = i / puffs;
+    const px = w * (0.16 + 0.68 * t) + rng.range(-14, 14);
+    const py = h * 0.62 - Math.sin(t * Math.PI) * h * rng.range(0.18, 0.3) + rng.range(-5, 5);
+    const r = rng.range(18, 34) * (0.6 + Math.sin(t * Math.PI) * 0.6);
+    const grad = ctx.createRadialGradient(px, py, r * 0.1, px, py, r);
+    grad.addColorStop(0, 'rgba(255,255,255,0.75)');
+    grad.addColorStop(0.6, 'rgba(255,255,255,0.28)');
+    grad.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = grad;
+    ctx.fillRect(0, 0, w, h);
+  }
+  // fade the very bottom so clouds read flat-based
+  const fade = ctx.createLinearGradient(0, h * 0.72, 0, h);
+  fade.addColorStop(0, 'rgba(0,0,0,0)');
+  fade.addColorStop(1, 'rgba(0,0,0,0.9)');
+  ctx.globalCompositeOperation = 'destination-out';
+  ctx.fillStyle = fade;
+  ctx.fillRect(0, h * 0.72, w, h * 0.28);
+  ctx.globalCompositeOperation = 'source-over';
+  return new THREE.CanvasTexture(canvas);
 }
 
 function makeMoonTexture() {

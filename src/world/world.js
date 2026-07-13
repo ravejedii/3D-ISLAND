@@ -66,7 +66,7 @@ export class World {
       bridgeWood.push(...built.woodGeo);
       bridgeRopes.push(...built.ropeGeos);
     }
-    const plankMat = new THREE.MeshStandardMaterial({ color: 0x8a6a45, flatShading: true, roughness: 0.95 });
+    const plankMat = new THREE.MeshStandardMaterial({ color: 0xffffff, map: makeWoodTexture(), flatShading: true, roughness: 0.95 });
     const plankMesh = new THREE.Mesh(mergeGeometries(bridgePlanks), plankMat);
     plankMesh.castShadow = true;
     plankMesh.receiveShadow = true;
@@ -291,6 +291,46 @@ class CrystalField {
     this.rings.instanceMatrix.needsUpdate = true;
     this.glow.geometry.attributes.position.needsUpdate = true;
   }
+}
+
+function makeWoodTexture() {
+  const size = 128;
+  const canvas = document.createElement('canvas');
+  canvas.width = canvas.height = size;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#8a6a45';
+  ctx.fillRect(0, 0, size, size);
+  const rng = new RNG(414);
+  // grain streaks along x
+  for (let i = 0; i < 46; i++) {
+    const y = rng.range(0, size);
+    const alpha = rng.range(0.05, 0.22);
+    const light = rng.next() > 0.6;
+    ctx.strokeStyle = light ? `rgba(190,150,105,${alpha})` : `rgba(70,50,32,${alpha})`;
+    ctx.lineWidth = rng.range(0.6, 2.4);
+    ctx.beginPath();
+    ctx.moveTo(0, y);
+    for (let x = 0; x <= size; x += 16) {
+      ctx.lineTo(x, y + Math.sin(x * 0.08 + i) * rng.range(0.5, 2));
+    }
+    ctx.stroke();
+  }
+  // a few knots
+  for (let i = 0; i < 3; i++) {
+    const kx = rng.range(10, size - 10);
+    const ky = rng.range(10, size - 10);
+    ctx.strokeStyle = 'rgba(60,42,26,0.5)';
+    ctx.lineWidth = 1.2;
+    for (let r = 2; r < 7; r += 2) {
+      ctx.beginPath();
+      ctx.ellipse(kx, ky, r * 1.6, r, 0, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+  }
+  const tex = new THREE.CanvasTexture(canvas);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  tex.colorSpace = THREE.SRGBColorSpace;
+  return tex;
 }
 
 function makeGlowTexture() {

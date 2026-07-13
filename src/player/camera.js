@@ -16,13 +16,22 @@ export class ThirdPersonCamera {
 
     window.addEventListener('mousemove', (e) => {
       if (document.pointerLockElement) {
-        this.yaw -= e.movementX * 0.0026;
-        this.pitch = clamp(this.pitch + e.movementY * 0.0022, -0.5, 1.25);
+        this.applyLook(e.movementX, e.movementY);
       }
     });
     window.addEventListener('wheel', (e) => {
-      this.targetDist = clamp(this.targetDist + Math.sign(e.deltaY) * 0.8, 3.2, 13);
+      this.zoomBy(Math.sign(e.deltaY) * 0.8);
     }, { passive: true });
+  }
+
+  // shared by mouse-look and touch-drag
+  applyLook(dx, dy) {
+    this.yaw -= dx * 0.0026;
+    this.pitch = clamp(this.pitch + dy * 0.0022, -0.5, 1.25);
+  }
+
+  zoomBy(delta) {
+    this.targetDist = clamp(this.targetDist + delta, 3.2, 13);
   }
 
   update(dt, playerPos) {

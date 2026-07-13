@@ -26,6 +26,10 @@ pnpm dev          # http://localhost:5173
 | `Esc` | Pause |
 | `M` | Mute |
 
+**On phones/tablets** the game detects touch and switches to mobile controls:
+left thumb = virtual joystick (push to the rim to run), right thumb = drag to
+look / pinch to zoom, on-screen jump and pause buttons.
+
 ## What's inside
 
 - **World** — five floating islands built from an analytic heightfield
@@ -37,7 +41,11 @@ pnpm dev          # http://localhost:5173
 - **Gameplay** — third-person controller with capsule collision, ledge
   step-up rules, bridge rails, void respawn; 10 crystals to collect,
   win screen with your time.
-- **Performance** — merged geometry (~37 draw calls, ~34k triangles),
+- **Rendering** — pmndrs `postprocessing` pipeline at high quality on real
+  GPUs: N8AO screen-space ambient occlusion, bloom, SMAA, vignette, and a
+  light color grade; image-based lighting from a PMREM capture of the
+  procedural sky, refreshed as the day-night cycle turns.
+- **Performance** — merged geometry (~32 draw calls, ~33k triangles),
   adaptive quality that steps shadow resolution / pixel ratio up and down
   to hold frame rate, and a software-rasterizer detector that switches to
   a fast preset under SwiftShader/llvmpipe (append `?lowgfx` to force it).

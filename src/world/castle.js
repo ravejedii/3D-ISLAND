@@ -8,11 +8,16 @@ import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 function colored(geo, hex) {
   const color = new THREE.Color(hex);
   const count = geo.attributes.position.count;
+  const pos = geo.attributes.position;
   const colors = new Float32Array(count * 3);
   for (let i = 0; i < count; i++) {
-    colors[i * 3] = color.r;
-    colors[i * 3 + 1] = color.g;
-    colors[i * 3 + 2] = color.b;
+    // subtle per-vertex tonal noise so large flat faces read as weathered
+    // stone instead of untextured plastic (keyed on position => stable)
+    const k = Math.sin(pos.getX(i) * 12.9898 + pos.getY(i) * 78.233 + pos.getZ(i) * 37.719) * 43758.5453;
+    const jitter = 0.93 + (k - Math.floor(k)) * 0.14;
+    colors[i * 3] = color.r * jitter;
+    colors[i * 3 + 1] = color.g * jitter;
+    colors[i * 3 + 2] = color.b * jitter;
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   return geo;

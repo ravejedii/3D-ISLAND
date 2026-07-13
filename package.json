@@ -9,10 +9,18 @@
     "preview": "vite preview --port 4173 --strictPort",
     "test": "playwright test"
   },
-  "keywords": ["game", "threejs", "3d"],
+  "keywords": [
+    "game",
+    "threejs",
+    "3d"
+  ],
   "license": "MIT",
   "packageManager": "pnpm@10.33.0",
   "dependencies": {
+    "@fontsource/cinzel": "^5.2.8",
+    "@fontsource/manrope": "^5.2.8",
+    "n8ao": "^2.0.0",
+    "postprocessing": "^6.39.2",
     "three": "^0.185.1"
   },
   "devDependencies": {

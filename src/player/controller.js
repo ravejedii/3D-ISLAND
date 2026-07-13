@@ -80,27 +80,32 @@ export class Player {
   update(dt, input, camYaw) {
     const world = this.world;
 
-    // camera-relative move direction
-    let mx = 0;
-    let mz = 0;
+    // camera-relative move direction: analog stick (moveX/moveZ in [-1,1])
+    // and digital keys feed the same vector
+    let mx = input.moveX || 0;
+    let mz = input.moveZ || 0;
     if (input.forward) mz -= 1;
     if (input.back) mz += 1;
     if (input.left) mx -= 1;
     if (input.right) mx += 1;
-    const moving = mx !== 0 || mz !== 0;
+    let mag = Math.hypot(mx, mz);
+    const moving = mag > 0.08;
     let dirX = 0;
     let dirZ = 0;
     if (moving) {
-      const len = Math.hypot(mx, mz);
-      mx /= len;
-      mz /= len;
+      if (mag > 1) {
+        mx /= mag;
+        mz /= mag;
+        mag = 1;
+      }
       const sin = Math.sin(camYaw);
       const cos = Math.cos(camYaw);
-      dirX = mx * cos - mz * sin;
-      dirZ = mx * sin + mz * cos;
+      dirX = (mx * cos - mz * sin) / mag;
+      dirZ = (mx * sin + mz * cos) / mag;
     }
 
-    const speed = input.run ? RUN_SPEED : WALK_SPEED;
+    // stick pushed to the rim counts as running
+    const speed = (input.run || mag > 0.93 ? RUN_SPEED : WALK_SPEED) * (moving ? mag : 1);
     const accel = this.grounded ? 44 : 14;
     this.velocity.x += (dirX * speed - this.velocity.x) * Math.min(1, accel * dt / speed * 4);
     this.velocity.z += (dirZ * speed - this.velocity.z) * Math.min(1, accel * dt / speed * 4);
