@@ -206,6 +206,28 @@ test('pause and resume flow', async ({ page }) => {
   }
 });
 
+test('glTF assets load and drive the player model', async ({ page }) => {
+  const errors = await boot(page);
+  expect(await page.evaluate(() => window.__game.assetFailures)).toEqual([]);
+  expect(await page.evaluate(() => window.__game.assetsLoaded)).toBeGreaterThanOrEqual(17);
+  expect(await page.evaluate(() => window.__game.usingModelPlayer)).toBe(true);
+  expect(errors).toEqual([]);
+});
+
+test('missing assets degrade to procedural fallbacks without crashing', async ({ page }) => {
+  const errors = [];
+  page.on('pageerror', (e) => errors.push(String(e)));
+  await page.goto(`${URL}/?noassets`, { waitUntil: 'networkidle' });
+  await page.waitForFunction(() => window.__game !== undefined, { timeout: 30000 });
+  expect(await page.evaluate(() => window.__game.assetFailures.length)).toBeGreaterThan(0);
+  expect(await page.evaluate(() => window.__game.usingModelPlayer)).toBe(false);
+  // game still starts and plays
+  await page.evaluate(() => window.__game.start());
+  await page.waitForFunction(() => window.__game.grounded, null, { timeout: 30000 });
+  expect(await page.evaluate(() => window.__game.state)).toBe('playing');
+  expect(errors).toEqual([]);
+});
+
 test('day/night cycle changes lighting without errors', async ({ page }) => {
   const errors = await boot(page);
   await page.evaluate(() => window.__game.start());

@@ -1,6 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RNG, hash2 } from '../core/rng.js';
+import { bakeToGeometry } from '../core/assets.js';
 
 // Instanced scenery: pine trees, rocks, grass tufts, flowers.
 // Everything is placed with seeded rejection sampling on walkable slopes.
@@ -81,18 +82,41 @@ function scatter(island, rng, count, ok, maxSlope = 0.45, rimMax = 0.82) {
   return spots;
 }
 
-export function buildProps(islands, { seed = 909, exclude }) {
+export function buildProps(islands, { seed = 909, exclude, models = {} }) {
   const rng = new RNG(seed);
   const group = new THREE.Group();
   const colliders = [];
   const windTime = { value: 0 };
 
-  const defs = [
-    { geo: pineGeometry(), per: (isl) => Math.round(isl.radius * 0.55), scale: [0.8, 1.7], tint: [0x9adf8a, 0x5d8a52], collideR: 0.4, maxSlope: 0.4, shadow: true, sway: 0.05 },
-    { geo: rockGeometry(), per: (isl) => Math.round(isl.radius * 0.22), scale: [0.4, 1.5], tint: [0xb9b6ae, 0x74716b], collideR: 1.0, maxSlope: 0.6, shadow: true },
-    { geo: grassGeometry(), per: (isl) => Math.round(isl.radius * 1.6), scale: [0.7, 1.5], tint: [0xd0ff9e, 0x7fbf62], collideR: 0, maxSlope: 0.5, shadow: false, sway: 0.35 },
-    { geo: flowerGeometry(), per: (isl) => Math.round(isl.radius * 0.4), scale: [0.8, 1.3], tint: [0xff8ab5, 0x9e6bff, 0xffd166, 0xff6b6b], collideR: 0, maxSlope: 0.45, shadow: false, palette: true, sway: 0.25 },
-  ];
+  // Bake glTF models (KayKit, CC0) into instancing-ready geometry; every
+  // variant that failed to load simply isn't offered, and if none loaded we
+  // fall back to the procedural primitives.
+  const bake = (gltf) => bakeToGeometry(gltf, mergeGeometries);
+  const treeVariants = [models.treeA, models.treeB, models.treesMediumA].map(bake).filter(Boolean);
+  const forestVariants = [models.treesLargeA, models.treesLargeB].map(bake).filter(Boolean);
+  const rockVariants = [models.rockA, models.rockB, models.rockC, models.rockD, models.rockE].map(bake).filter(Boolean);
+
+  const defs = [];
+  if (treeVariants.length) {
+    for (const v of treeVariants) {
+      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round((isl.radius * 0.28) / treeVariants.length), scale: [2.8, 4.6], collideR: 0.09, maxSlope: 0.4, shadow: true, sway: 0.05 });
+    }
+    for (const v of forestVariants) {
+      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round((isl.radius * 0.06) / forestVariants.length), scale: [3.4, 4.8], collideR: 0.3, maxSlope: 0.32, shadow: true, sway: 0.04 });
+    }
+  } else {
+    defs.push({ geo: pineGeometry(), per: (isl) => Math.round(isl.radius * 0.55), scale: [0.8, 1.7], tint: [0x9adf8a, 0x5d8a52], collideR: 0.4, maxSlope: 0.4, shadow: true, sway: 0.05 });
+  }
+  if (rockVariants.length) {
+    for (const v of rockVariants) {
+      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round((isl.radius * 0.2) / rockVariants.length), scale: [3, 7.5], collideR: 0.14, maxSlope: 0.6, shadow: true });
+    }
+  } else {
+    defs.push({ geo: rockGeometry(), per: (isl) => Math.round(isl.radius * 0.22), scale: [0.4, 1.5], tint: [0xb9b6ae, 0x74716b], collideR: 1.0, maxSlope: 0.6, shadow: true });
+  }
+  // grass + flowers stay procedural — they read great and sway in the wind
+  defs.push({ geo: grassGeometry(), per: (isl) => Math.round(isl.radius * 1.6), scale: [0.7, 1.5], tint: [0xd0ff9e, 0x7fbf62], collideR: 0, maxSlope: 0.5, shadow: false, sway: 0.35 });
+  defs.push({ geo: flowerGeometry(), per: (isl) => Math.round(isl.radius * 0.4), scale: [0.8, 1.3], tint: [0xff8ab5, 0x9e6bff, 0xffd166, 0xff6b6b], collideR: 0, maxSlope: 0.45, shadow: false, palette: true, sway: 0.25 });
 
   const dummy = new THREE.Object3D();
   const tintColor = new THREE.Color();
@@ -106,7 +130,9 @@ export function buildProps(islands, { seed = 909, exclude }) {
       placements.push(...spots);
     }
     if (!placements.length) continue;
-    const mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 });
+    const mat = def.material
+      ? def.material.clone()
+      : new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 });
     if (def.sway) {
       // wind: vertices lean by height, phase varies per instance position
       const sway = def.sway;
@@ -136,14 +162,16 @@ export function buildProps(islands, { seed = 909, exclude }) {
       dummy.scale.setScalar(s);
       dummy.updateMatrix();
       mesh.setMatrixAt(i, dummy.matrix);
-      if (def.palette) {
-        tintColor.set(rng.pick(def.tint));
-      } else {
-        baseA.set(def.tint[0]);
-        baseB.set(def.tint[1]);
-        tintColor.copy(baseA).lerp(baseB, rng.next());
+      if (def.tint) {
+        if (def.palette) {
+          tintColor.set(rng.pick(def.tint));
+        } else {
+          baseA.set(def.tint[0]);
+          baseB.set(def.tint[1]);
+          tintColor.copy(baseA).lerp(baseB, rng.next());
+        }
+        mesh.setColorAt(i, tintColor);
       }
-      mesh.setColorAt(i, tintColor);
       if (def.collideR > 0) {
         colliders.push({ type: 'circle', x: p.x, z: p.z, r: def.collideR * s, minY: p.y - 1, maxY: p.y + 4 * s });
       }

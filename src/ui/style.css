@@ -57,6 +57,21 @@ html, body {
   animation: pulse-sub 1.8s ease-in-out infinite;
 }
 @keyframes pulse-sub { 0%, 100% { opacity: 0.45; } 50% { opacity: 1; } }
+.loading-bar {
+  width: 220px;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(140, 200, 255, 0.14);
+  overflow: hidden;
+}
+#loading-fill {
+  height: 100%;
+  width: 0%;
+  border-radius: 2px;
+  background: linear-gradient(90deg, #7df3ff, #4f9cff);
+  box-shadow: 0 0 10px rgba(110, 230, 255, 0.8);
+  transition: width 0.25s ease;
+}
 
 #game-canvas {
   position: fixed;

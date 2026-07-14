@@ -10,6 +10,7 @@ import {
   BrightnessContrastEffect, ToneMappingEffect, ToneMappingMode,
 } from 'postprocessing';
 import { N8AOPostPass } from 'n8ao';
+import { Assets } from './core/assets.js';
 import { World } from './world/world.js';
 import { Player } from './player/controller.js';
 import { ThirdPersonCamera } from './player/camera.js';
@@ -45,7 +46,37 @@ renderer.toneMappingExposure = 1.05;
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 2000);
 
-const world = new World(scene);
+// ---------- asset preload (glTF/GLB, CC0 KayKit packs) ----------
+// Everything the world swaps in for its procedural placeholders. Any entry
+// that fails resolves to null and the consumer keeps its procedural mesh.
+const assets = new Assets('assets/models/');
+assets.onProgress = (f) => {
+  const fill = document.getElementById('loading-fill');
+  const sub = document.getElementById('loading-sub');
+  if (fill) fill.style.width = `${Math.round(f * 100)}%`;
+  if (sub) sub.textContent = `summoning relics… ${Math.round(f * 100)}%`;
+};
+const models = await assets.loadAll({
+  knight: 'characters/Knight.glb',
+  treeA: 'nature/tree_single_A.gltf',
+  treeB: 'nature/tree_single_B.gltf',
+  treesLargeA: 'nature/trees_A_large.gltf',
+  treesMediumA: 'nature/trees_A_medium.gltf',
+  treesLargeB: 'nature/trees_B_large.gltf',
+  rockA: 'nature/rock_single_A.gltf',
+  rockB: 'nature/rock_single_B.gltf',
+  rockC: 'nature/rock_single_C.gltf',
+  rockD: 'nature/rock_single_D.gltf',
+  rockE: 'nature/rock_single_E.gltf',
+  castle: 'buildings/building_castle_blue.gltf',
+  windmill: 'buildings/building_windmill_blue.gltf',
+  homeA: 'buildings/building_home_A_blue.gltf',
+  homeB: 'buildings/building_home_B_blue.gltf',
+  well: 'buildings/building_well_blue.gltf',
+  tower: 'buildings/building_tower_A_blue.gltf',
+});
+
+const world = new World(scene, models);
 
 // post-processing (pmndrs `postprocessing` + n8ao): SSAO, bloom, SMAA,
 // vignette, and a light grade. Runs at quality 0-1 on hardware GL only.
@@ -78,7 +109,7 @@ function setComposerActive(active) {
   composerActive = active;
   renderer.toneMapping = active ? THREE.NoToneMapping : THREE.ACESFilmicToneMapping;
 }
-const player = new Player(world);
+const player = new Player(world, models.knight);
 scene.add(player.group);
 const tpCamera = new ThirdPersonCamera(camera, world);
 const hud = new HUD(document.getElementById('ui-root'));
@@ -430,6 +461,9 @@ window.__game = {
   setYaw(y) { tpCamera.yaw = y; },
   get cameraYaw() { return tpCamera.yaw; },
   get isMobile() { return isMobile; },
+  get assetsLoaded() { return assets.loadedCount; },
+  get assetFailures() { return [...assets.failures]; },
+  get usingModelPlayer() { return !player.isProcedural; },
   setTimeOfDay(t) { world.sky.setTime(t); },
   crystalPositions() { return world.crystals.map((c) => ({ x: c.x, y: c.baseY, z: c.z, collected: c.collected })); },
   groundHeight(x, z) { return world.groundHeight(x, z); },

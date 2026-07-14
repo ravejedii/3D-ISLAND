@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Island } from './islands.js';
 import { Bridge } from './bridges.js';
-import { buildCastle } from './castle.js';
+import { buildCastle, buildGateTorches } from './castle.js';
+import { placeModel } from '../core/assets.js';
 import { buildProps } from './props.js';
 import { Sky } from './sky.js';
 import { buildPond, buildWaterfall } from './water.js';
@@ -12,8 +13,9 @@ import { RNG } from '../core/rng.js';
 const SEED = 20260712;
 
 export class World {
-  constructor(scene) {
+  constructor(scene, models = {}) {
     this.scene = scene;
+    this.models = models;
     this.colliders = [];
     this.updatables = [];
 
@@ -76,14 +78,50 @@ export class World {
     const ropeMesh = new THREE.Mesh(mergeGeometries(bridgeRopes), ropeMat);
     scene.add(plankMesh, woodMesh, ropeMesh);
 
-    // --- castle on the plateau ---
+    // --- castle on the plateau: KayKit model, procedural keep as fallback ---
     this.castleCenter = new THREE.Vector3(castlePos.x, 6.5, castlePos.z);
-    const castle = buildCastle({ x: castlePos.x, z: castlePos.z, groundY: 6.5 });
-    scene.add(castle.group);
-    this.colliders.push(...castle.colliders);
-    this.windowsMaterial = castle.windowsMaterial;
-    this.torchLight = castle.torchLight;
-    this.torchFlames = castle.flames;
+    this.windowsMaterial = null;
+    this.torchLight = null;
+    this.torchFlames = [];
+    const placedCastle = placeModel(models.castle, {
+      x: castlePos.x, z: castlePos.z, y: 6.45, scale: 4.2, rotY: 0, colliderShrink: 0.6,
+    });
+    if (placedCastle) {
+      scene.add(placedCastle.model);
+      this.colliders.push(...placedCastle.colliders);
+      const torches = buildGateTorches({ x: castlePos.x, y: 6.45, z: castlePos.z + 5.2, spread: 2.6 });
+      scene.add(torches.group);
+      this.torchLight = torches.light;
+      this.torchFlames = torches.flames;
+    } else {
+      const castle = buildCastle({ x: castlePos.x, z: castlePos.z, groundY: 6.5 });
+      scene.add(castle.group);
+      this.colliders.push(...castle.colliders);
+      this.windowsMaterial = castle.windowsMaterial;
+      this.torchLight = castle.torchLight;
+      this.torchFlames = castle.flames;
+    }
+
+    // --- hamlet + satellite landmarks (model-only garnish) ---
+    this.buildingSpots = [];
+    const buildingPlan = [
+      { gltf: models.homeA, x: 30, z: 12, scale: 4.4, rotY: 2.6, shrink: 0.8 },
+      { gltf: models.homeB, x: 36, z: 21, scale: 4.4, rotY: -2.2, shrink: 0.8 },
+      { gltf: models.well, x: 29.5, z: 19, scale: 3.2, rotY: 0.6, shrink: 0.85 },
+      { gltf: models.windmill, isl: 1, dx: 2, dz: 3, scale: 6, rotY: 2.4, shrink: 0.6 },
+      { gltf: models.tower, isl: 0, dx: 6, dz: 5, scale: 5, rotY: 1.2, shrink: 0.7 },
+    ];
+    for (const b of buildingPlan) {
+      if (!b.gltf) continue;
+      const bx = b.isl !== undefined ? this.satellites[b.isl].center.x + b.dx : b.x;
+      const bz = b.isl !== undefined ? this.satellites[b.isl].center.z + b.dz : b.z;
+      const ground = this.groundHeightIslands(bx, bz);
+      if (!isFinite(ground)) continue;
+      const placed = placeModel(b.gltf, { x: bx, z: bz, y: ground - 0.1, scale: b.scale, rotY: b.rotY, colliderShrink: b.shrink });
+      scene.add(placed.model);
+      this.colliders.push(...placed.colliders);
+      this.buildingSpots.push({ x: bx, z: bz, r: 3.2 * (b.scale / 4.4) });
+    }
 
     // --- pond + waterfalls ---
     const pondY = this.main.heightAt(18, 26) + 0.55;
@@ -104,18 +142,19 @@ export class World {
       this.updatables.push((dt, t) => fall.update(t));
     }
 
-    // --- props (keep clear of castle, pond, bridge mouths, spawn) ---
+    // --- props (keep clear of castle, pond, buildings, bridge mouths, spawn) ---
     const clearZones = [
       { x: castlePos.x, z: castlePos.z, r: 21 },
       { x: 18, z: 26, r: 9.5 },
       { x: 0, z: 44, r: 5 }, // spawn
+      ...this.buildingSpots.map((b) => ({ x: b.x, z: b.z, r: b.r + 2 })),
     ];
     for (const br of this.bridges) {
       clearZones.push({ x: br.a.x, z: br.a.z, r: 6 });
       clearZones.push({ x: br.b.x, z: br.b.z, r: 6 });
     }
     const exclude = (x, z) => clearZones.every((c) => Math.hypot(x - c.x, z - c.z) > c.r);
-    const props = buildProps(this.islands, { seed: SEED + 99, exclude });
+    const props = buildProps(this.islands, { seed: SEED + 99, exclude, models });
     scene.add(props.group);
     this.colliders.push(...props.colliders);
     this.updatables.push((dt, t) => (props.windTime.value = t));
@@ -135,8 +174,13 @@ export class World {
   buildCrystals() {
     const rng = new RNG(SEED + 500);
     // polar (island, angle, radiusFrac); one is inside the keep
+    // First crystal sits behind the castle on the plateau when the solid
+    // castle model is in use (no walkable interior), inside the keep otherwise.
+    const keepSpot = this.models.castle
+      ? { isl: this.main, x: -13, z: -31 }
+      : { isl: this.main, x: this.castleCenter.x, z: this.castleCenter.z - 18 * 0.35 };
     const spots = [
-      { isl: this.main, x: this.castleCenter.x, z: this.castleCenter.z - 18 * 0.35 }, // keep interior
+      keepSpot,
       { isl: this.main, a: 0.6, f: 0.62 },
       { isl: this.main, a: 2.8, f: 0.7 },
       { isl: this.main, a: 4.2, f: 0.55 },
@@ -158,6 +202,16 @@ export class World {
     }
     this.crystalField = new CrystalField(this.scene, crystals);
     return crystals;
+  }
+
+  // island-only ground height (no bridges) — used to seat buildings
+  groundHeightIslands(x, z) {
+    let g = -Infinity;
+    for (const isl of this.islands) {
+      const h = isl.heightAt(x, z);
+      if (h > g) g = h;
+    }
+    return g;
   }
 
   // ground height under (x, z): islands + bridges. -Infinity over the void.

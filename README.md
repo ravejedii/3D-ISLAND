@@ -32,6 +32,13 @@ look / pinch to zoom, on-screen jump and pause buttons.
 
 ## What's inside
 
+- **Assets** — professionally made CC0 models by [KayKit](https://kaylousberg.com)
+  (bundled in `public/assets/models/`, see its LICENSE.md): a fully rigged and
+  animated Knight player character (idle/walk/run/jump via AnimationMixer),
+  instanced trees and rocks, and a castle, windmill, cottages, well, and
+  watchtower. Loaded through a central `GLTFLoader` manager with progress on
+  the loading screen; any asset that fails to load falls back to the original
+  procedural mesh so the game never breaks (`?noassets` simulates this).
 - **World** — five floating islands built from an analytic heightfield
   (the same math drives the render mesh and the collision), rocky skirts,
   a castle with a walkable courtyard and keep, sagging rope bridges,

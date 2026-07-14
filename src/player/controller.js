@@ -8,9 +8,11 @@ const JUMP_SPEED = 11;
 const MAX_STEP = 0.85; // max ledge the player can walk up
 const KILL_Y = -70;
 
-// Stylized low-poly adventurer + movement physics against the analytic world.
+// Animated KayKit Knight (glb) — or the original procedural adventurer when
+// the model is unavailable — plus movement physics against the analytic world.
+// Physics/collision are identical for both visual bodies.
 export class Player {
-  constructor(world) {
+  constructor(world, knightGltf = null) {
     this.world = world;
     this.position = world.spawn.clone();
     this.velocity = new THREE.Vector3();
@@ -19,10 +21,77 @@ export class Player {
     this.radius = 0.45;
     this.walkPhase = 0;
     this.fellCallback = null;
+    this.mixer = null;
+    this.actions = {};
+    this.currentAction = null;
 
     this.group = new THREE.Group();
-    this.buildMesh();
+    this.isProcedural = !this.buildModelMesh(knightGltf);
+    if (this.isProcedural) this.buildMesh();
     this.group.position.copy(this.position);
+  }
+
+  // Returns true when the glb character was set up successfully.
+  buildModelMesh(gltf) {
+    if (!gltf || !gltf.scene) return false;
+    try {
+      const model = gltf.scene;
+      // pick one loadout: sword + round shield; hide the alternates
+      const hide = /^(1H_Sword_Offhand|2H_Sword|Badge_Shield|Rectangle_Shield|Spike_Shield)$/;
+      model.traverse((o) => {
+        if (hide.test(o.name)) o.visible = false;
+        if (o.isMesh) {
+          o.castShadow = true;
+          o.frustumCulled = false; // skinned bounds are unreliable
+        }
+      });
+      // normalize to ~1.85m tall regardless of source units
+      const box = new THREE.Box3().setFromObject(model);
+      const height = Math.max(box.max.y - box.min.y, 0.001);
+      const s = 1.85 / height;
+      model.scale.setScalar(s);
+      model.position.y = -box.min.y * s;
+
+      this.mixer = new THREE.AnimationMixer(model);
+      const wanted = {
+        idle: /^Idle$/i,
+        walk: /^Walking_A$/i,
+        run: /^Running_A$/i,
+        jumpStart: /^Jump_Start$/i,
+        jumpIdle: /^Jump_Idle$/i,
+        jumpLand: /^Jump_Land$/i,
+        cheer: /^Cheer$/i,
+      };
+      for (const [key, re] of Object.entries(wanted)) {
+        const clip = gltf.animations.find((c) => re.test(c.name));
+        if (clip) this.actions[key] = this.mixer.clipAction(clip);
+      }
+      if (!this.actions.idle || !this.actions.run) return false; // bad export — fall back
+      for (const a of Object.values(this.actions)) a.enabled = true;
+      if (this.actions.jumpLand) {
+        this.actions.jumpLand.setLoop(THREE.LoopOnce, 1);
+        this.actions.jumpLand.clampWhenFinished = true;
+      }
+      this.playAction('idle');
+      this.body = model; // reuse the existing lean/bob hook points harmlessly
+      this.group.add(model);
+      return true;
+    } catch (e) {
+      console.warn('[player] knight setup failed, using procedural body', e);
+      return false;
+    }
+  }
+
+  playAction(name, fade = 0.18) {
+    const next = this.actions[name];
+    if (!next || this.currentAction === next) return;
+    next.reset().play();
+    if (this.currentAction) this.currentAction.crossFadeTo(next, fade, false);
+    this.currentAction = next;
+  }
+
+  playCheer() {
+    if (this.actions.cheer) this.playAction('cheer', 0.25);
   }
 
   buildMesh() {
@@ -230,7 +299,21 @@ export class Player {
     this.group.rotation.y = this.heading;
 
     const hSpeed = Math.hypot(this.velocity.x, this.velocity.z);
-    if (this.grounded && hSpeed > 0.5) {
+    if (this.mixer) {
+      // glb character: drive the AnimationMixer state machine
+      if (!this.grounded) {
+        this.playAction(this.velocity.y > 2 ? 'jumpStart' : 'jumpIdle', 0.12);
+      } else if (hSpeed > 8.5) {
+        this.playAction('run');
+        if (this.actions.run) this.actions.run.timeScale = hSpeed / 10;
+      } else if (hSpeed > 0.6) {
+        this.playAction(this.actions.walk ? 'walk' : 'run');
+        if (this.actions.walk) this.actions.walk.timeScale = Math.max(0.6, hSpeed / 4);
+      } else if (this.currentAction !== this.actions.cheer || !this.actions.cheer?.isRunning()) {
+        this.playAction('idle');
+      }
+      this.mixer.update(dt);
+    } else if (this.grounded && hSpeed > 0.5) {
       this.walkPhase += dt * (input.run ? 13 : 9);
       const swing = Math.sin(this.walkPhase) * 0.55;
       this.legL.rotation.x = swing;

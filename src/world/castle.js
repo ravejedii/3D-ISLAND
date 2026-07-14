@@ -186,24 +186,33 @@ export function buildCastle({ x, z, groundY }) {
   group.add(mesh, winMesh);
 
   // gate torches: two flame sprites + one shared flickering light
+  const torches = buildGateTorches({ x, y: y0, z: z + half, spread: gateW / 2 + 0.6 });
+  group.add(torches.group);
+
+  return { group, colliders, windowsMaterial, torchLight: torches.light, flames: torches.flames };
+}
+
+// Two torch flames + a shared flickering point light — used at the gate of
+// both the procedural castle and the glTF castle model.
+export function buildGateTorches({ x, y, z, spread = 3 }) {
+  const group = new THREE.Group();
   const flameTex = makeFlameTexture();
   const flames = [];
   for (const side of [-1, 1]) {
     const fm = new THREE.SpriteMaterial({ map: flameTex, color: 0xffc27a, transparent: true, opacity: 0.95, blending: THREE.AdditiveBlending, depthWrite: false });
     const flame = new THREE.Sprite(fm);
-    flame.position.set(x + side * (gateW / 2 + 0.6), y0 + 3.4, z + half + 0.9);
+    flame.position.set(x + side * spread, y + 3.4, z + 0.9);
     flame.scale.set(0.7, 1.1, 1);
     group.add(flame);
     flames.push(flame);
     const bracket = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 0.7, 5), new THREE.MeshStandardMaterial({ color: 0x3a3f4a, flatShading: true }));
-    bracket.position.set(x + side * (gateW / 2 + 0.6), y0 + 2.95, z + half + 0.9);
+    bracket.position.set(x + side * spread, y + 2.95, z + 0.9);
     group.add(bracket);
   }
-  const torchLight = new THREE.PointLight(0xff9a45, 0, 26, 1.8);
-  torchLight.position.set(x, y0 + 3.6, z + half + 1.6);
-  group.add(torchLight);
-
-  return { group, colliders, windowsMaterial, torchLight, flames };
+  const light = new THREE.PointLight(0xff9a45, 0, 26, 1.8);
+  light.position.set(x, y + 3.6, z + 1.6);
+  group.add(light);
+  return { group, light, flames };
 }
 
 let _flameTex = null;
