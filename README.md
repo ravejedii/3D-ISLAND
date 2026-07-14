@@ -1,6 +1,6 @@
 # Floating Isles
 
-**▶ Play it now: <https://ravejedii.github.io/GAMETEST/>**
+**▶ Play it now: <https://ravejedii.github.io/3D-ISLAND/>** — works on desktop and mobile.
 
 A 3D explorable world that runs in the browser. A scattered kingdom drifts in
 the endless sky — cross rope bridges between floating islands, explore the
