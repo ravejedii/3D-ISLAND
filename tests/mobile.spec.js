@@ -26,6 +26,8 @@ test('detects touch device and shows touch controls in game', async ({ page }) =
   // regression guard for the iOS white-screen: phones must use the plain
   // render path, never the HDR post-processing chain
   expect(await page.evaluate(() => window.__game.composerActive)).toBe(false);
+  // perf preset: phones must not boot at the max-quality tier
+  expect(await page.evaluate(() => window.__game.qualityLevel)).toBeGreaterThanOrEqual(2);
   expect(errors).toEqual([]);
 });
 

@@ -82,7 +82,9 @@ const models = await assets.loadAll({
   tower: 'buildings/building_tower_A_blue.gltf',
 });
 
-const world = new World(scene, models, { cheapSky: softwareGL && !fxForced });
+// phones get the cheap palette sky too: the atmospheric-scattering shader is
+// a full-screen per-pixel cost that mobile GPUs pay every frame
+const world = new World(scene, models, { cheapSky: (softwareGL || isMobile) && !fxForced });
 
 // post-processing (pmndrs `postprocessing` + n8ao): SSAO, bloom, SMAA,
 // vignette, and a light grade. Runs at quality 0-1 on hardware GL only.
@@ -369,8 +371,8 @@ function applyQuality(i) {
     composer.setSize(window.innerWidth, window.innerHeight); // re-reads pixel ratio
   }
   setComposerActive(!!composer && i <= 1);
-  // dense grass only where the GPU can afford it
-  if (world.grassField) world.grassField.mesh.visible = (!softwareGL || fxForced) && i <= 2;
+  // dense grass only where the GPU can afford it (26k instanced blades)
+  if (world.grassField) world.grassField.mesh.visible = ((!softwareGL && !isMobile) || fxForced) && i <= 2;
   renderer.shadowMap.enabled = q.shadows;
   world.sky.sun.castShadow = q.shadows;
   if (q.shadows) {
@@ -391,8 +393,9 @@ function autoQuality(dt) {
   if (qualityLocked || qualityCooldown > 0 || fpsHistory.length < 6) return;
   const recent = fpsHistory.slice(-6);
   const avg = recent.reduce((a, b) => a + b, 0) / recent.length;
-  // software rasterizers never climb back into shadow-mapped levels
-  const minIndex = softwareGL ? 3 : 0;
+  // software rasterizers never climb back into shadow-mapped levels;
+  // phones never climb back into the max-resolution tier
+  const minIndex = softwareGL ? 3 : isMobile ? 1 : 0;
   if (avg < 42 && qualityIndex < qualityLevels.length - 1) {
     applyQuality(qualityIndex + 1);
     qualityCooldown = 4;
@@ -411,11 +414,13 @@ let elapsed = 0;
 renderer.compile(scene, camera);
 
 if (softwareGL) applyQuality(qualityLevels.length - 1);
+else if (isMobile) applyQuality(2); // phones start modest; adaptive quality tunes from there
 else setComposerActive(!!composer && qualityIndex <= 1);
 
 // image-based lighting: the sky dome becomes the environment map, refreshed
-// as the day-night cycle moves (cheap: a few times per minute)
-if (!softwareGL) world.sky.initEnvironment(renderer, scene);
+// as the day-night cycle moves. Desktop only — the periodic PMREM re-render
+// is a guaranteed frame hitch on phones.
+if (!softwareGL && !isMobile) world.sky.initEnvironment(renderer, scene);
 
 function tick() {
   const rawDt = clock.getDelta();
