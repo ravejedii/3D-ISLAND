@@ -74,16 +74,9 @@ a six-waypoint tour (thresholds are calibrated for software rendering in CI;
 
 ## Deployment
 
-The game is served by GitHub Pages from the `gh-pages` branch. To redeploy:
-
-```bash
-pnpm build
-# publish dist/ as the gh-pages branch (orphan history, .nojekyll included)
-git worktree add /tmp/gh-pages gh-pages
-rm -rf /tmp/gh-pages/* && cp -r dist/* /tmp/gh-pages/ && touch /tmp/gh-pages/.nojekyll
-git -C /tmp/gh-pages add -A && git -C /tmp/gh-pages commit -m "Deploy" && git -C /tmp/gh-pages push origin gh-pages
-git worktree remove /tmp/gh-pages
-```
+Every push to `main` deploys automatically: the GitHub Actions workflow in
+`.github/workflows/deploy.yml` builds with pnpm and publishes `dist/` to
+GitHub Pages. No manual steps, no deploy branch.
 
 The build uses relative asset paths (`base: './'` in `vite.config.js`), so it
 works from any subpath.
