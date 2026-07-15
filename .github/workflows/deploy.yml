@@ -35,9 +35,9 @@ jobs:
   deploy:
     needs: build
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+    # no `environment:` block — the auto-created github-pages environment
+    # carries a gh-pages-only branch policy left over from the legacy deploy
+    # mode, which rejects deployments from main before the job starts
     steps:
       - uses: actions/deploy-pages@v4
         id: deployment
