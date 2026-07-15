@@ -36,6 +36,10 @@ function detectSoftwareGL() {
 }
 const softwareGL = new URLSearchParams(location.search).has('lowgfx') || detectSoftwareGL();
 const fxForced = new URLSearchParams(location.search).has('fx');
+// mobile GPUs choke on the HDR post chain (white-screen on iOS Safari):
+// phones get the plain render path, which every test exercises
+const isMobile = detectMobile();
+if (isMobile) document.body.classList.add('touch-mode');
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !softwareGL, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -87,7 +91,7 @@ let composer = null;
 let composerActive = false;
 let dofPass = null;
 let godRays = null;
-if (!softwareGL || fxForced) {
+if ((!softwareGL && !isMobile) || fxForced) {
   composer = new EffectComposer(renderer, { frameBufferType: THREE.HalfFloatType });
   composer.addPass(new RenderPass(scene, camera));
   const n8ao = new N8AOPostPass(scene, camera, window.innerWidth, window.innerHeight);
@@ -138,8 +142,6 @@ const audio = new GameAudio();
 
 // ---------- input ----------
 const input = { forward: false, back: false, left: false, right: false, run: false, jump: false, moveX: 0, moveZ: 0 };
-const isMobile = detectMobile();
-if (isMobile) document.body.classList.add('touch-mode');
 const keyMap = {
   KeyW: 'forward', ArrowUp: 'forward',
   KeyS: 'back', ArrowDown: 'back',
@@ -490,6 +492,7 @@ window.__game = {
   setYaw(y) { tpCamera.yaw = y; },
   get cameraYaw() { return tpCamera.yaw; },
   get isMobile() { return isMobile; },
+  get composerActive() { return composerActive; },
   get assetsLoaded() { return assets.loadedCount; },
   get assetFailures() { return [...assets.failures]; },
   get usingModelPlayer() { return !player.isProcedural; },

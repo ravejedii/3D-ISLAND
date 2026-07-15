@@ -23,6 +23,9 @@ test('detects touch device and shows touch controls in game', async ({ page }) =
   await expect(page.locator('#touch-ui')).toHaveClass(/active/);
   await expect(page.locator('#btn-jump')).toBeVisible();
   await expect(page.locator('#btn-pause-touch')).toBeVisible();
+  // regression guard for the iOS white-screen: phones must use the plain
+  // render path, never the HDR post-processing chain
+  expect(await page.evaluate(() => window.__game.composerActive)).toBe(false);
   expect(errors).toEqual([]);
 });
 
