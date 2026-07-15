@@ -12,12 +12,14 @@ export function buildPond({ x, z, y, radius }) {
       uniform float uTime;
       varying vec2 vUv;
       varying float vWave;
+      varying vec3 vWPos;
       void main() {
         vUv = uv;
         vec3 p = position;
         float w = sin(p.x * 1.7 + uTime * 1.6) * cos(p.y * 1.4 + uTime * 1.1);
         vWave = w;
         p.z += w * 0.06;
+        vWPos = (modelMatrix * vec4(p, 1.0)).xyz;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(p, 1.0);
       }
     `,
@@ -25,20 +27,25 @@ export function buildPond({ x, z, y, radius }) {
       uniform float uTime;
       varying vec2 vUv;
       varying float vWave;
+      varying vec3 vWPos;
       float hash(vec2 p) {
         return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
       }
       void main() {
-        vec3 deep = vec3(0.10, 0.35, 0.44);
-        vec3 shallow = vec3(0.30, 0.62, 0.66);
+        vec3 deep = vec3(0.09, 0.34, 0.45);
+        vec3 shallow = vec3(0.28, 0.62, 0.64);
         float d = distance(vUv, vec2(0.5));
         vec3 col = mix(deep, shallow, smoothstep(0.5, 0.18, d));
         col += vWave * 0.045;
-        // sun glints: sparse cells that blink on and off
-        vec2 cell = floor(vUv * 46.0);
+        // grazing angles pick up the sky (cheap fresnel on a flat pond)
+        vec3 viewDir = normalize(cameraPosition - vWPos);
+        float fres = pow(1.0 - clamp(abs(viewDir.y), 0.0, 1.0), 3.0);
+        col = mix(col, vec3(0.62, 0.78, 0.88), fres * 0.45);
+        // sun glints: smaller, calmer cells
+        vec2 cell = floor(vUv * 70.0);
         float h = hash(cell);
-        float blink = smoothstep(0.94, 1.0, sin(uTime * (1.5 + h * 2.5) + h * 40.0) * 0.5 + 0.5);
-        col += vec3(1.0, 0.98, 0.9) * blink * step(0.82, h) * 0.55;
+        float blink = smoothstep(0.95, 1.0, sin(uTime * (0.9 + h * 1.6) + h * 40.0) * 0.5 + 0.5);
+        col += vec3(1.0, 0.98, 0.9) * blink * step(0.88, h) * 0.4;
         // soft foam ring hugging the shore
         float foamBand = smoothstep(0.415, 0.46, d + sin(atan(vUv.y - 0.5, vUv.x - 0.5) * 9.0 + uTime * 0.8) * 0.012);
         col = mix(col, vec3(0.85, 0.95, 0.95), foamBand * 0.5);

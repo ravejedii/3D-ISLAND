@@ -77,11 +77,11 @@ export class Island {
     const indices = [];
     const col = new THREE.Color();
 
-    const grass = new THREE.Color(0x5d9e4a);
-    const grassDark = new THREE.Color(0x467f38);
-    const dirt = new THREE.Color(0x9a7b52);
-    const stone = new THREE.Color(0x8d8a85);
-    const rimRock = new THREE.Color(0x7d6b58);
+    const grass = new THREE.Color(0x6cb04f);
+    const grassDark = new THREE.Color(0x4f9140);
+    const dirt = new THREE.Color(0xa5854f);
+    const stone = new THREE.Color(0x928e88);
+    const rimRock = new THREE.Color(0x8a7660);
 
     // --- top surface: radial grid with a center fan ---
     const topH = this.heightAt(this.center.x, this.center.z);

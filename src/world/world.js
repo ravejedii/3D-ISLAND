@@ -4,16 +4,19 @@ import { Island } from './islands.js';
 import { Bridge } from './bridges.js';
 import { buildCastle, buildGateTorches } from './castle.js';
 import { placeModel } from '../core/assets.js';
+import CustomShaderMaterial from 'three-custom-shader-material/vanilla';
 import { buildProps } from './props.js';
 import { Sky } from './sky.js';
 import { buildPond, buildWaterfall } from './water.js';
 import { Ambient } from './ambient.js';
+import { GrassField } from './grassfield.js';
 import { RNG } from '../core/rng.js';
 
 const SEED = 20260712;
 
 export class World {
-  constructor(scene, models = {}) {
+  constructor(scene, models = {}, { cheapSky = false } = {}) {
+    this.cheapSky = cheapSky;
     this.scene = scene;
     this.models = models;
     this.colliders = [];
@@ -40,9 +43,61 @@ export class World {
     ];
     this.islands = [this.main, ...this.satellites];
 
-    // one merged mesh for all island terrain
+    // one merged mesh for all island terrain — stylized shader (CSM extends
+    // MeshStandardMaterial, so shadows/env/SSAO still apply): posterized
+    // color bands + slope-based cliff rock + macro noise kill the smeary
+    // vertex-gradient look while collision stays purely analytic
     const terrainGeo = mergeGeometries(this.islands.map((i) => i.buildGeometry()));
-    const terrainMat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1 });
+    const terrainMat = new CustomShaderMaterial({
+      baseMaterial: THREE.MeshStandardMaterial,
+      vertexColors: true,
+      flatShading: true,
+      roughness: 1,
+      silent: true,
+      uniforms: { uCliff: { value: new THREE.Color(0x8a8177) } },
+      vertexShader: /* glsl */ `
+        varying vec3 vWPos;
+        varying vec3 vWNormal;
+        void main() {
+          vWPos = (modelMatrix * vec4(position, 1.0)).xyz;
+          vWNormal = normalize(mat3(modelMatrix) * normal);
+        }
+      `,
+      fragmentShader: /* glsl */ `
+        varying vec3 vWPos;
+        varying vec3 vWNormal;
+        uniform vec3 uCliff;
+        float hash12(vec2 p) {
+          vec3 p3 = fract(vec3(p.xyx) * 0.1031);
+          p3 += dot(p3, p3.yzx + 33.33);
+          return fract((p3.x + p3.y) * p3.z);
+        }
+        float vnoise(vec2 p) {
+          vec2 i = floor(p);
+          vec2 f = fract(p);
+          f = f * f * (3.0 - 2.0 * f);
+          return mix(mix(hash12(i), hash12(i + vec2(1, 0)), f.x),
+                     mix(hash12(i + vec2(0, 1)), hash12(i + vec2(1, 1)), f.x), f.y);
+        }
+        void main() {
+          // csm_DiffuseColor doesn't include vertex colors — read them directly
+          vec3 base = vColor.rgb;
+          // crisp tonal bands instead of smooth smears
+          base = floor(base * 8.0 + 0.5) / 8.0;
+          // macro color variation so large fields don't look flat
+          float macro = vnoise(vWPos.xz * 0.045);
+          base *= 0.92 + macro * 0.16;
+          // fine dither breaks residual banding
+          base *= 0.985 + hash12(vWPos.xz * 2.7) * 0.03;
+          // steep faces become rock
+          float slope = 1.0 - clamp(vWNormal.y, 0.0, 1.0);
+          float rockMix = smoothstep(0.42, 0.62, slope);
+          vec3 cliff = uCliff * (0.75 + vnoise(vWPos.xz * 0.35 + vWPos.y * 0.2) * 0.45);
+          base = mix(base, cliff, rockMix * 0.85);
+          csm_DiffuseColor.rgb = base;
+        }
+      `,
+    });
     this.terrain = new THREE.Mesh(terrainGeo, terrainMat);
     this.terrain.receiveShadow = true;
     this.terrain.castShadow = false;
@@ -159,11 +214,15 @@ export class World {
     this.colliders.push(...props.colliders);
     this.updatables.push((dt, t) => (props.windTime.value = t));
 
+    // dense shader grass on the main island meadows (quality-gated in main.js)
+    this.grassField = new GrassField(scene, this.main, exclude);
+    this.updatables.push((dt, t) => this.grassField.update(t, this.scene.fog.color));
+
     // --- crystals ---
     this.crystals = this.buildCrystals();
 
     // --- sky ---
-    this.sky = new Sky(scene);
+    this.sky = new Sky(scene, { cheap: cheapSky });
 
     // --- ambient life: fireflies, pollen, birds ---
     this.ambient = new Ambient(scene, this);

@@ -26,17 +26,27 @@ test('detects touch device and shows touch controls in game', async ({ page }) =
   expect(errors).toEqual([]);
 });
 
+test('joystick base is visible before any touch', async ({ page }) => {
+  await bootMobile(page);
+  await page.tap('#btn-play');
+  await page.waitForTimeout(400);
+  const base = page.locator('#joy-base');
+  await expect(base).toBeVisible();
+  const opacity = await base.evaluate((el) => parseFloat(getComputedStyle(el).opacity));
+  expect(opacity).toBeGreaterThan(0.3); // visible at rest, not hidden until touch
+});
+
 test('virtual joystick moves the player', async ({ page }) => {
   await bootMobile(page);
   await page.tap('#btn-play');
   await page.waitForFunction(() => window.__game.grounded && window.__game.fps > 5, null, { timeout: 30000 });
   const before = await page.evaluate(() => window.__game.playerPos);
 
-  // hold a forward drag on the left joystick zone
-  const zone = page.locator('#joy-zone');
+  // drag forward from the (fixed, visible) joystick base
+  const zone = page.locator('#joy-base');
   const box = await zone.boundingBox();
   const cx = box.x + box.width * 0.5;
-  const cy = box.y + box.height * 0.7;
+  const cy = box.y + box.height * 0.5;
   const cdp = await page.context().newCDPSession(page);
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: cx, y: cy, id: 1 }] });
   await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: cx, y: cy - 70, id: 1 }] });

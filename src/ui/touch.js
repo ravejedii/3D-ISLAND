@@ -27,15 +27,23 @@ export class TouchControls {
     root.appendChild(this.container);
 
     // --- joystick (left half) ---
+    // The base is ALWAYS visible at a fixed spot so players immediately see
+    // where to put their thumb; any touch in the left zone steers relative
+    // to the base center.
     const zone = this.container.querySelector('#joy-zone');
     this.base = this.container.querySelector('#joy-base');
     this.thumb = this.container.querySelector('#joy-thumb');
     this.stickId = null;
-    this.origin = { x: 0, y: 0 };
+
+    const baseCenter = () => {
+      const r = this.base.getBoundingClientRect();
+      return { x: r.left + r.width / 2, y: r.top + r.height / 2 };
+    };
 
     const stickMove = (t) => {
-      let dx = t.clientX - this.origin.x;
-      let dy = t.clientY - this.origin.y;
+      const c = baseCenter();
+      let dx = t.clientX - c.x;
+      let dy = t.clientY - c.y;
       const d = Math.hypot(dx, dy);
       if (d > STICK_RADIUS) {
         dx *= STICK_RADIUS / d;
@@ -57,9 +65,6 @@ export class TouchControls {
       if (this.stickId === null) {
         const t = e.changedTouches[0];
         this.stickId = t.identifier;
-        this.origin = { x: t.clientX, y: t.clientY };
-        this.base.style.left = `${t.clientX}px`;
-        this.base.style.top = `${t.clientY}px`;
         this.base.classList.add('live');
         stickMove(t);
       }

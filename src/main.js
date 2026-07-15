@@ -8,6 +8,7 @@ import {
   EffectComposer, RenderPass, EffectPass,
   BloomEffect, SMAAEffect, VignetteEffect, HueSaturationEffect,
   BrightnessContrastEffect, ToneMappingEffect, ToneMappingMode,
+  GodRaysEffect, DepthOfFieldEffect, NoiseEffect, BlendFunction,
 } from 'postprocessing';
 import { N8AOPostPass } from 'n8ao';
 import { Assets } from './core/assets.js';
@@ -34,6 +35,7 @@ function detectSoftwareGL() {
   }
 }
 const softwareGL = new URLSearchParams(location.search).has('lowgfx') || detectSoftwareGL();
+const fxForced = new URLSearchParams(location.search).has('fx');
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !softwareGL, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -41,7 +43,7 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 1.05;
+renderer.toneMappingExposure = 0.72; // physical Sky is much brighter than the old gradient dome
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 2000);
@@ -76,14 +78,16 @@ const models = await assets.loadAll({
   tower: 'buildings/building_tower_A_blue.gltf',
 });
 
-const world = new World(scene, models);
+const world = new World(scene, models, { cheapSky: softwareGL && !fxForced });
 
 // post-processing (pmndrs `postprocessing` + n8ao): SSAO, bloom, SMAA,
 // vignette, and a light grade. Runs at quality 0-1 on hardware GL only.
 // (?fx forces it on software GL so headless screenshots can verify it.)
 let composer = null;
 let composerActive = false;
-if (!softwareGL || new URLSearchParams(location.search).has('fx')) {
+let dofPass = null;
+let godRays = null;
+if (!softwareGL || fxForced) {
   composer = new EffectComposer(renderer, { frameBufferType: THREE.HalfFloatType });
   composer.addPass(new RenderPass(scene, camera));
   const n8ao = new N8AOPostPass(scene, camera, window.innerWidth, window.innerHeight);
@@ -92,12 +96,29 @@ if (!softwareGL || new URLSearchParams(location.search).has('fx')) {
   n8ao.configuration.distanceFalloff = 0.6;
   n8ao.setQualityMode('Medium');
   composer.addPass(n8ao);
+  // volumetric light shafts from the sun disc
+  godRays = new GodRaysEffect(camera, world.sky.sunSphere, {
+    resolutionScale: 0.5,
+    density: 0.9,
+    decay: 0.92,
+    weight: 0.16,
+    samples: 30,
+  });
+  // dreamy depth blur, only while the title screen's cinematic camera runs
+  const dof = new DepthOfFieldEffect(camera, { focusDistance: 0.02, focalLength: 0.06, bokehScale: 3.2 });
+  dofPass = new EffectPass(camera, dof);
+  dofPass.enabled = false;
+  composer.addPass(dofPass);
+  const grain = new NoiseEffect({ blendFunction: BlendFunction.COLOR_DODGE, premultiply: true });
+  grain.blendMode.opacity.value = 0.05;
   composer.addPass(new EffectPass(
     camera,
+    godRays,
     new BloomEffect({ intensity: 0.5, luminanceThreshold: 0.72, luminanceSmoothing: 0.2, mipmapBlur: true }),
-    new HueSaturationEffect({ saturation: 0.14 }),
-    new BrightnessContrastEffect({ contrast: 0.07 }),
+    new HueSaturationEffect({ saturation: 0.16 }),
+    new BrightnessContrastEffect({ contrast: 0.08 }),
     new VignetteEffect({ offset: 0.28, darkness: 0.5 }),
+    grain,
     new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC }),
     new SMAAEffect(),
   ));
@@ -188,6 +209,10 @@ function startGame() {
   playStartTime = performance.now();
   setState('playing');
   lockPointer();
+  if (isMobile && !startGame._hinted) {
+    startGame._hinted = true;
+    hud.toast('Left stick: move · Right side: drag to look', 3800);
+  }
 }
 
 function resumeGame() {
@@ -342,6 +367,8 @@ function applyQuality(i) {
     composer.setSize(window.innerWidth, window.innerHeight); // re-reads pixel ratio
   }
   setComposerActive(!!composer && i <= 1);
+  // dense grass only where the GPU can afford it
+  if (world.grassField) world.grassField.mesh.visible = (!softwareGL || fxForced) && i <= 2;
   renderer.shadowMap.enabled = q.shadows;
   world.sky.sun.castShadow = q.shadows;
   if (q.shadows) {
@@ -423,6 +450,8 @@ function tick() {
   burst.update(dt);
 
   if (composerActive) {
+    if (dofPass) dofPass.enabled = state === 'title'; // dreamy blur only on the title cinematic
+    if (godRays) godRays.blendMode.opacity.value = world.sky.dayFactor ?? 1;
     composer.render(dt);
   } else {
     renderer.render(scene, camera);

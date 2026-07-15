@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { Sky as AtmoSky } from 'three/addons/objects/Sky.js';
 import { RNG, clamp, lerp, smoothstep } from '../core/rng.js';
 
 // Sky dome + sun/moon lighting + stars + drifting clouds + fog, all driven by
@@ -13,61 +14,38 @@ const PAL = {
 };
 
 export class Sky {
-  constructor(scene) {
+  constructor(scene, { cheap = false } = {}) {
     this.scene = scene;
     this.time = 0.22; // start late morning
     this.speed = 1 / DAY_LENGTH;
 
-    // dome
-    this.uniforms = {
-      topColor: { value: new THREE.Color(PAL.day.top) },
-      horizonColor: { value: new THREE.Color(PAL.day.horizon) },
-      sunDir: { value: new THREE.Vector3(0, 1, 0) },
-      sunColor: { value: new THREE.Color(PAL.day.sun) },
-      sunGlow: { value: 1 },
-      duskGlow: { value: 0 },
-      duskColor: { value: new THREE.Color(0xff8a4a) },
-    };
-    const domeMat = new THREE.ShaderMaterial({
-      side: THREE.BackSide,
-      depthWrite: false,
-      fog: false,
-      uniforms: this.uniforms,
-      vertexShader: /* glsl */ `
-        varying vec3 vDir;
-        void main() {
-          vDir = normalize(position);
-          vec4 mv = modelViewMatrix * vec4(position, 1.0);
-          gl_Position = projectionMatrix * mv;
-          gl_Position.z = gl_Position.w; // pin to far plane
-        }
-      `,
-      fragmentShader: /* glsl */ `
-        varying vec3 vDir;
-        uniform vec3 topColor;
-        uniform vec3 horizonColor;
-        uniform vec3 sunDir;
-        uniform vec3 sunColor;
-        uniform float sunGlow;
-        uniform float duskGlow;
-        uniform vec3 duskColor;
-        void main() {
-          float h = clamp(vDir.y, 0.0, 1.0);
-          vec3 col = mix(horizonColor, topColor, pow(h, 0.62));
-          float sunDot = clamp(dot(vDir, sunDir), 0.0, 1.0);
-          col += sunColor * pow(sunDot, 220.0) * 1.6 * sunGlow;      // disc
-          col += sunColor * pow(sunDot, 6.0) * 0.22 * sunGlow;       // halo
-          // warm band hugging the horizon at dawn/dusk, strongest sunward
-          float band = exp(-abs(vDir.y) * 7.0);
-          float sunward = 0.35 + 0.65 * pow(clamp(dot(normalize(vec3(vDir.x, 0.0, vDir.z)), normalize(vec3(sunDir.x, 0.0, sunDir.z))), 0.0, 1.0), 2.0);
-          col += duskColor * band * sunward * duskGlow;
-          gl_FragColor = vec4(col, 1.0);
-        }
-      `,
-    });
-    this.dome = new THREE.Mesh(new THREE.SphereGeometry(900, 32, 18), domeMat);
-    this.dome.frustumCulled = false;
-    scene.add(this.dome);
+    if (cheap) {
+      // software rasterizers can't afford the full-screen scattering shader —
+      // a palette-driven background color stands in
+      this.dome = null;
+      this.atmo = null;
+      scene.background = new THREE.Color(PAL.day.horizon);
+    } else {
+      // physically-based atmospheric scattering (three.js Sky addon):
+      // real rayleigh/mie sunsets and horizon glow, driven by the day cycle
+      this.dome = new AtmoSky();
+      this.dome.scale.setScalar(1800);
+      this.dome.frustumCulled = false;
+      this.atmo = this.dome.material.uniforms;
+      this.atmo.turbidity.value = 6;
+      this.atmo.rayleigh.value = 1.6;
+      this.atmo.mieCoefficient.value = 0.004;
+      this.atmo.mieDirectionalG.value = 0.85;
+      scene.add(this.dome);
+    }
+
+    // bright disc the god-rays effect samples as its light source
+    this.sunSphere = new THREE.Mesh(
+      new THREE.SphereGeometry(22, 16, 12),
+      new THREE.MeshBasicMaterial({ color: 0xfff2cf, fog: false, transparent: true, opacity: 0.95 }),
+    );
+    this.sunSphere.frustumCulled = false;
+    scene.add(this.sunSphere);
 
     // lights
     this.sun = new THREE.DirectionalLight(0xffffff, 2.2);
@@ -149,11 +127,13 @@ export class Sky {
   initEnvironment(renderer, scene) {
     this.pmrem = new THREE.PMREMGenerator(renderer);
     this.envScene = new THREE.Scene();
-    this.envScene.add(new THREE.Mesh(this.dome.geometry, this.dome.material));
+    const envDome = new THREE.Mesh(this.dome.geometry, this.dome.material);
+    envDome.scale.setScalar(1800);
+    this.envScene.add(envDome);
     this.envTarget = scene;
     this.envRT = null;
     this.lastEnvTime = -1;
-    scene.environmentIntensity = 0.45;
+    scene.environmentIntensity = 0.2; // the physical sky env is bright
     this.refreshEnvironment();
   }
 
@@ -188,25 +168,34 @@ export class Sky {
       return c;
     };
 
-    this.uniforms.topColor.value.copy(mix3('top'));
-    this.uniforms.horizonColor.value.copy(mix3('horizon'));
-    this.uniforms.sunColor.value.copy(mix3('sun'));
-    this.uniforms.sunGlow.value = sunEl > -0.12 ? 1 : 0; // the moon sprite takes over at night
-    this.uniforms.duskGlow.value = sunsetF * 0.55;
+    // atmosphere: hazier + more scattering toward sunset, crisp at noon
+    if (this.atmo) {
+      this.atmo.sunPosition.value.copy(sunDir);
+      this.atmo.rayleigh.value = lerp(1.4, 3.4, sunsetF);
+      this.atmo.turbidity.value = lerp(5, 9, sunsetF);
+      this.atmo.mieCoefficient.value = lerp(0.0035, 0.008, sunsetF);
+    } else {
+      this.scene.background.copy(mix3('horizon'));
+    }
+    this.dayFactor = dayF;
+
+    // god-rays source disc rides the sun; fades out for the night
+    this.sunSphere.position.copy(playerPos).addScaledVector(sunDir, 780);
+    this.sunSphere.material.opacity = clamp(dayF * 1.2 - 0.1, 0, 1);
+    this.sunSphere.visible = sunEl > -0.08;
 
     // when the sun sets, the "sun" light becomes the moon (opposite side)
     const isDay = sunEl > -0.04;
     const lightDir = isDay ? sunDir : sunDir.clone().multiplyScalar(-1);
-    this.uniforms.sunDir.value.copy(isDay ? sunDir : lightDir);
 
     this.sun.position.copy(playerPos).addScaledVector(lightDir, 150);
     this.sun.target.position.copy(playerPos);
-    this.sun.intensity = isDay ? lerp(0.35, 2.4, dayF) : 0.9;
+    this.sun.intensity = isDay ? lerp(0.35, 1.9, dayF) : 0.9;
     this.sun.color.set(isDay ? mix3('sun') : new THREE.Color(0x8fa5e8));
 
     this.hemi.color.copy(mix3('hemiSky'));
     this.hemi.groundColor.copy(mix3('hemiGround'));
-    this.hemi.intensity = lerp(0.55, 1.0, dayF);
+    this.hemi.intensity = lerp(0.5, 0.8, dayF);
 
     this.scene.fog.color.copy(mix3('fog'));
 
@@ -236,7 +225,7 @@ export class Sky {
     this.moon.position.copy(playerPos).addScaledVector(sunDir, -820);
     this.moonMat.opacity = clamp(nightF - 0.15, 0, 1);
 
-    this.dome.position.copy(playerPos);
+    if (this.dome) this.dome.position.copy(playerPos);
     this.stars.position.set(playerPos.x, 0, playerPos.z);
   }
 }
