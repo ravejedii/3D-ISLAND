@@ -1,6 +1,6 @@
 {
   "name": "floating-isles",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "A 3D explorable floating-islands world that runs in the browser",
   "type": "module",
   "scripts": {
