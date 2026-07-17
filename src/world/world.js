@@ -62,8 +62,12 @@ export class World {
       base: 2.6,
       plateau: { x: castlePos.x, z: castlePos.z, radius: 20, height: 6.5 },
       pond: { x: 18, z: 26, radius: 7, depth: 1.6 },
-      rings: 26,
-      sectors: 80,
+      // fan the grid from flat meadow in the west — a fan near the castle
+      // ramp draws lighting spokes across the approach
+      gridOrigin: { x: -18, z: 26 },
+      // dense enough that plateau slopes don't streak into radial slivers
+      rings: 36,
+      sectors: 104,
     });
     this.satellites = [
       new Island({ center: new THREE.Vector3(-95, 6, -34), radius: 26, seed: SEED + 7, amp: 4, base: 2.4, rings: 16, sectors: 48 }),
@@ -74,9 +78,9 @@ export class World {
     this.islands = [this.main, ...this.satellites];
 
     // one merged mesh for all island terrain — stylized shader (CSM extends
-    // MeshStandardMaterial, so shadows/env/SSAO still apply): posterized
-    // color bands + slope-based cliff rock + macro noise kill the smeary
-    // vertex-gradient look while collision stays purely analytic
+    // MeshStandardMaterial, so shadows/env/SSAO still apply): clean color
+    // blocking in a fixed palette + slope cliffs + painted dirt paths, with
+    // collision staying purely analytic
     const terrainGeo = mergeGeometries(this.islands.map((i) => i.buildGeometry()));
     const terrainMat = new CustomShaderMaterial({
       baseMaterial: THREE.MeshStandardMaterial,
@@ -85,8 +89,8 @@ export class World {
       roughness: 1,
       silent: true,
       uniforms: {
-        uCliff: { value: new THREE.Color(0x8a8177) },
-        uPath: { value: new THREE.Color(0xb59468) },
+        uCliff: { value: new THREE.Color(0x998772) },
+        uPath: { value: new THREE.Color(0xc9a26a) },
         uPathSegs: { value: PATH_SEGMENTS.map(([a, b, c, d]) => new THREE.Vector4(a, b, c, d)) },
       },
       vertexShader: /* glsl */ `
@@ -123,17 +127,14 @@ export class World {
         void main() {
           // csm_DiffuseColor doesn't include vertex colors — read them directly
           vec3 base = vColor.rgb;
-          // crisp tonal bands instead of smooth smears
-          base = floor(base * 8.0 + 0.5) / 8.0;
-          // macro color variation so large fields don't look flat
-          float macro = vnoise(vWPos.xz * 0.045);
-          base *= 0.92 + macro * 0.16;
-          // fine dither breaks residual banding
-          base *= 0.985 + hash12(vWPos.xz * 2.7) * 0.03;
+          // broad, smooth warm/cool drift across the meadow — a hue shift,
+          // not a brightness multiply, so fields stay clean instead of muddy
+          float macro = smoothstep(0.3, 0.8, vnoise(vWPos.xz * 0.028));
+          base = mix(base, base * vec3(1.1, 1.04, 0.82), macro * 0.3);
           // steep faces become rock
           float slope = 1.0 - clamp(vWNormal.y, 0.0, 1.0);
           float rockMix = smoothstep(0.42, 0.62, slope);
-          vec3 cliff = uCliff * (0.75 + vnoise(vWPos.xz * 0.35 + vWPos.y * 0.2) * 0.45);
+          vec3 cliff = uCliff * (0.84 + vnoise(vWPos.xz * 0.35 + vWPos.y * 0.2) * 0.28);
           base = mix(base, cliff, rockMix * 0.85);
           // worn dirt paths, wobbled by noise so edges aren't ruler-straight
           float pd = 1e6;

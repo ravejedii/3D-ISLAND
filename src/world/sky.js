@@ -8,7 +8,7 @@ import { RNG, clamp, lerp, smoothstep } from '../core/rng.js';
 const DAY_LENGTH = 240; // seconds per full cycle
 
 const PAL = {
-  day: { top: 0x3a7bd5, horizon: 0xaed6f1, fog: 0xa4c4e2, sun: 0xfff3d6, hemiSky: 0xbfd9ff, hemiGround: 0x94836a },
+  day: { top: 0x4287d6, horizon: 0xbfe2f2, fog: 0xb7d8e9, sun: 0xfff3d6, hemiSky: 0xcae0ff, hemiGround: 0x8b9c63 },
   sunset: { top: 0x35418c, horizon: 0xff9d5c, fog: 0xdca882, sun: 0xffb46b, hemiSky: 0xd99c7c, hemiGround: 0x6a5a4c },
   night: { top: 0x0a1028, horizon: 0x233158, fog: 0x1a2240, sun: 0x9db4ff, hemiSky: 0x33415f, hemiGround: 0x232630 },
 };

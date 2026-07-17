@@ -8,7 +8,7 @@ import {
   EffectComposer, RenderPass, EffectPass,
   BloomEffect, SMAAEffect, VignetteEffect, HueSaturationEffect,
   BrightnessContrastEffect, ToneMappingEffect, ToneMappingMode,
-  GodRaysEffect, DepthOfFieldEffect, NoiseEffect, BlendFunction,
+  GodRaysEffect, DepthOfFieldEffect,
 } from 'postprocessing';
 import { N8AOPostPass } from 'n8ao';
 import { Assets } from './core/assets.js';
@@ -40,6 +40,13 @@ const fxForced = new URLSearchParams(location.search).has('fx');
 // phones get the plain render path, which every test exercises
 const isMobile = detectMobile();
 if (isMobile) document.body.classList.add('touch-mode');
+// phones skip the post chain, so they get the grade's vignette as a static
+// composited overlay instead — costs nothing per frame
+if (isMobile && !fxForced) {
+  const grade = document.createElement('div');
+  grade.id = 'cheap-grade';
+  document.body.appendChild(grade);
+}
 
 const renderer = new THREE.WebGLRenderer({ canvas, antialias: !softwareGL, powerPreference: 'high-performance' });
 renderer.setPixelRatio(Math.min(window.devicePixelRatio, 1.75));
@@ -47,7 +54,10 @@ renderer.setSize(window.innerWidth, window.innerHeight);
 renderer.shadowMap.enabled = true;
 renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 renderer.toneMapping = THREE.ACESFilmicToneMapping;
-renderer.toneMappingExposure = 0.72; // physical Sky is much brighter than the old gradient dome
+// 0.72 balances the bright physical Sky on desktop; phones render the cheap
+// palette sky without the composer's grade, so they need honest exposure —
+// the old shared 0.72 is exactly why mobile looked washed-out and flat
+renderer.toneMappingExposure = (softwareGL || isMobile) && !fxForced ? 1.0 : 0.72;
 
 const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(62, window.innerWidth / window.innerHeight, 0.1, 2000);
@@ -93,7 +103,9 @@ if ((!softwareGL && !isMobile) || fxForced) {
   composer.addPass(new RenderPass(scene, camera));
   const n8ao = new N8AOPostPass(scene, camera, window.innerWidth, window.innerHeight);
   n8ao.configuration.aoRadius = 2.2;
-  n8ao.configuration.intensity = 2.6;
+  // gentle contact shading — the terrain bakes its own cavity AO, so heavy
+  // SSAO on top just muddies the color script
+  n8ao.configuration.intensity = 1.4;
   n8ao.configuration.distanceFalloff = 0.6;
   n8ao.setQualityMode('Medium');
   composer.addPass(n8ao);
@@ -102,7 +114,7 @@ if ((!softwareGL && !isMobile) || fxForced) {
     resolutionScale: 0.5,
     density: 0.9,
     decay: 0.92,
-    weight: 0.16,
+    weight: 0.11,
     samples: 30,
   });
   // dreamy depth blur, only while the title screen's cinematic camera runs
@@ -110,16 +122,15 @@ if ((!softwareGL && !isMobile) || fxForced) {
   dofPass = new EffectPass(camera, dof);
   dofPass.enabled = false;
   composer.addPass(dofPass);
-  const grain = new NoiseEffect({ blendFunction: BlendFunction.COLOR_DODGE, premultiply: true });
-  grain.blendMode.opacity.value = 0.05;
+  // deliberately lean grade: the color script lives in the materials, the
+  // chain only adds glow, gentle contrast and a frame — no film grain
   composer.addPass(new EffectPass(
     camera,
     godRays,
     new BloomEffect({ intensity: 0.42, luminanceThreshold: 0.85, luminanceSmoothing: 0.18, mipmapBlur: true }),
-    new HueSaturationEffect({ saturation: 0.12 }),
-    new BrightnessContrastEffect({ contrast: 0.1 }),
-    new VignetteEffect({ offset: 0.28, darkness: 0.5 }),
-    grain,
+    new HueSaturationEffect({ saturation: 0.1 }),
+    new BrightnessContrastEffect({ contrast: 0.08 }),
+    new VignetteEffect({ offset: 0.32, darkness: 0.42 }),
     new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC }),
     new SMAAEffect(),
   ));

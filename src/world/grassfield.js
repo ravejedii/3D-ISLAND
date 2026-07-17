@@ -49,8 +49,8 @@ export class GrassField {
 
     this.uniforms = {
       uTime: { value: 0 },
-      uLow: { value: new THREE.Color(0x4a7a3e) },
-      uHigh: { value: new THREE.Color(0x9dbd6a) },
+      uLow: { value: new THREE.Color(0x4d9448) },
+      uHigh: { value: new THREE.Color(0xa9d05c) },
       fogColor: { value: new THREE.Color() },
       fogNear: { value: 120 },
       fogFar: { value: 620 },

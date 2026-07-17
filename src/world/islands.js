@@ -15,8 +15,13 @@ export class Island {
     pond = null, // { x, z, radius, depth } in world coords
     rings = 22,
     sectors = 64,
+    gridOrigin = null, // where the radial grid fans from (default: center) —
+    // park it on flat ground, because sliver triangles at the fan turn any
+    // height gradient into radial lighting spokes
   }) {
     this.center = center;
+    this.gox = gridOrigin ? gridOrigin.x : center.x;
+    this.goz = gridOrigin ? gridOrigin.z : center.z;
     this.radius = radius;
     this.seed = seed;
     this.amp = amp;
@@ -39,8 +44,28 @@ export class Island {
     const dz = z - this.center.z;
     const d = Math.sqrt(dx * dx + dz * dz) / this.radius;
     if (d >= 1) return -Infinity;
+    let h = this.rawHeight(x, z, d);
+    // near the grid's fan origin, blend to the local tangent plane so the
+    // sliver triangles there share one normal (no lighting spokes)
+    const gd = Math.hypot(x - this.gox, z - this.goz) / this.radius;
+    if (gd < 0.14) {
+      const e = 2.0;
+      const od = Math.hypot(this.gox - this.center.x, this.goz - this.center.z) / this.radius;
+      const hC = this.rawHeight(this.gox, this.goz, od);
+      const gx = (this.rawHeight(this.gox + e, this.goz, od) - hC) / e;
+      const gz = (this.rawHeight(this.gox, this.goz + e, od) - hC) / e;
+      const plane = hC + gx * (x - this.gox) + gz * (z - this.goz);
+      h = lerp(plane, h, smoothstep(0.05, 0.14, gd));
+    }
+    return h;
+  }
+
+  rawHeight(x, z, d) {
     const falloff = 1 - smoothstep(0.55, 1.0, d);
-    const n = fbm(x * this.noiseScale, z * this.noiseScale, this.seed, 4);
+    // calm the noise near the grid's fan origin: sliver triangles there turn
+    // any height variation into radial lighting spokes
+    const gd = Math.hypot(x - this.gox, z - this.goz) / this.radius;
+    const n = fbm(x * this.noiseScale, z * this.noiseScale, this.seed, 4) * smoothstep(0.02, 0.14, gd);
     let h = (this.base + n * this.amp) * falloff;
     // Gentle dome so the middle sits higher than the rim
     h += (1 - d * d) * this.base * 0.6;
@@ -77,27 +102,37 @@ export class Island {
     const indices = [];
     const col = new THREE.Color();
 
-    const grass = new THREE.Color(0x7aa758);
-    const grassDark = new THREE.Color(0x5a8a4a);
-    const dirt = new THREE.Color(0xa5854f);
-    const stone = new THREE.Color(0x958f86);
-    const rimRock = new THREE.Color(0x8f7a62);
+    const grass = new THREE.Color(0x77bb4f);
+    const grassDark = new THREE.Color(0x4d9448);
+    const dirt = new THREE.Color(0xb08f57);
+    const stone = new THREE.Color(0x968b7a);
+    const rimRock = new THREE.Color(0x94805f);
 
-    // --- top surface: radial grid with a center fan ---
-    const topH = this.heightAt(this.center.x, this.center.z);
-    positions.push(this.center.x, topH, this.center.z);
-    this.colorForSurface(this.center.x, this.center.z, 0, col, { grass, grassDark, dirt, stone, rimRock });
+    // --- top surface: radial grid fanning from gridOrigin ---
+    // Rings interpolate between the fan origin and the exact rim circle, so
+    // the origin can sit on flat ground while the rim still welds to the skirt.
+    const topH = this.heightAt(this.gox, this.goz);
+    positions.push(this.gox, topH, this.goz);
+    this.colorForSurface(this.gox, this.goz, 0, col, { grass, grassDark, dirt, stone, rimRock });
     colors.push(col.r, col.g, col.b);
 
     for (let i = 1; i <= rings; i++) {
       const t = i / rings;
-      const r = this.radius * Math.pow(t, 0.85); // denser toward the middle
+      const f = Math.pow(t, 0.85); // denser toward the fan origin
       for (let j = 0; j < sectors; j++) {
-        const a = (j / sectors) * Math.PI * 2;
-        const jitter = (hash2(i * 91 + j, this.seed, 7) - 0.5) * (this.radius / rings) * 0.6 * (i < rings ? 1 : 0);
-        const rr = r + jitter;
-        const x = this.center.x + Math.cos(a) * rr;
-        const z = this.center.z + Math.sin(a) * rr;
+        // stagger alternate rings half a sector so triangles stay close to
+        // equilateral instead of degenerating into radial slivers
+        // (the rim ring stays aligned — the skirt welds to it)
+        const a = ((j + (i < rings ? (i % 2) * 0.5 : 0)) / sectors) * Math.PI * 2;
+        const rimX = this.center.x + Math.cos(a) * this.radius;
+        const rimZ = this.center.z + Math.sin(a) * this.radius;
+        const dirX = rimX - this.gox;
+        const dirZ = rimZ - this.goz;
+        const len = Math.hypot(dirX, dirZ);
+        const jitter = (hash2(i * 91 + j, this.seed, 7) - 0.5) * (len / rings) * 0.6 * (i < rings ? 1 : 0);
+        const ff = f + jitter / len;
+        const x = this.gox + dirX * ff;
+        const z = this.goz + dirZ * ff;
         const y = i === rings ? this.center.y : this.heightAt(x, z);
         positions.push(x, y, z);
         this.colorForSurface(x, z, t, col, { grass, grassDark, dirt, stone, rimRock });
@@ -162,24 +197,33 @@ export class Island {
   }
 
   colorForSurface(x, z, t, out, pal) {
-    const slope = this.slopeAt(x, z);
+    // the radial grid fans into sliver triangles at the island center, so any
+    // per-vertex variation there interpolates into visible spokes — fade all
+    // noise terms to plain grass near the fan
+    const damp = smoothstep(0.03, 0.16, t);
     const n = fbm(x * 0.11 + 40, z * 0.11 - 17, this.seed + 5, 3);
-    out.copy(pal.grass).lerp(pal.grassDark, clamp(n * 0.5 + 0.5, 0, 1));
+    out.copy(pal.grass).lerp(pal.grassDark, clamp(n * 0.5 + 0.5, 0, 1) * damp + 0.35 * (1 - damp));
     // warm meadow patches so the grass reads less uniform
     const meadow = fbm(x * 0.028 - 90, z * 0.028 + 55, this.seed + 11, 2);
-    if (meadow > 0.1) out.lerp(new THREE.Color(0x9cab5c), clamp((meadow - 0.1) * 2.2, 0, 0.5));
-    if (n > 0.42) out.lerp(pal.dirt, 0.55);
-    // cheap baked AO: darken concavities (height below the local average)
+    if (meadow > 0.1) out.lerp(new THREE.Color(0xa9c25e), clamp((meadow - 0.1) * 2.2, 0, 0.5) * damp);
+    // dirt shows only where the noise peaks hard — scattered accents, not blotch
+    if (n > 0.55) out.lerp(pal.dirt, 0.4 * damp);
+    // cheap baked AO: darken concavities (height below the local average).
+    // This is the only AO phones get, so it carries real weight.
     const e = 2.6;
     const h0 = this.heightAt(x, z);
     if (isFinite(h0)) {
       const avg = (this.heightAt(x + e, z) + this.heightAt(x - e, z) + this.heightAt(x, z + e) + this.heightAt(x, z - e)) / 4;
       if (isFinite(avg)) {
-        const cavity = clamp((avg - h0) * 0.55, 0, 0.35);
+        const cavity = clamp((avg - h0) * 0.7, 0, 0.42) * damp;
         out.multiplyScalar(1 - cavity);
+        // cool the shadowed dips slightly so depth reads as air, not dirt
+        out.lerp(new THREE.Color(0x3d6a55), cavity * 0.5);
       }
     }
-    if (isFinite(slope) && slope > 0.38) out.lerp(pal.stone, clamp((slope - 0.38) * 2.2, 0, 1));
+    // NOTE: steep-face rock is painted per-facet by the terrain fragment
+    // shader (crisp, flat-shaded); tinting it here per-vertex would smear
+    // radial streaks across the plateau ramps.
     if (t > 0.86) out.lerp(pal.rimRock, smoothstep(0.86, 1.0, t));
     if (this.pond) {
       const pd = Math.hypot(x - this.pond.x, z - this.pond.z);
