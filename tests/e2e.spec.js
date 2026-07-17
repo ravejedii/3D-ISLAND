@@ -242,7 +242,7 @@ test('pause and resume flow', async ({ page }) => {
 test('glTF assets load and drive the player model', async ({ page }) => {
   const errors = await boot(page);
   expect(await page.evaluate(() => window.__game.assetFailures)).toEqual([]);
-  expect(await page.evaluate(() => window.__game.assetsLoaded)).toBeGreaterThanOrEqual(12);
+  expect(await page.evaluate(() => window.__game.assetsLoaded)).toBeGreaterThanOrEqual(21);
   expect(await page.evaluate(() => window.__game.usingModelPlayer)).toBe(true);
   expect(errors).toEqual([]);
 });

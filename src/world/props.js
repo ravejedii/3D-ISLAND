@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RNG, hash2 } from '../core/rng.js';
-import { bakeToGeometry } from '../core/assets.js';
+import { bakeColored } from '../core/assets.js';
 import { oakGeometry, birchGeometry, pineGeometry as pineTreeGeometry, bushGeometry } from './trees.js';
 
 // Instanced scenery: pine trees, rocks, grass tufts, flowers.
@@ -79,32 +79,53 @@ export function buildProps(islands, { seed = 909, exclude, models = {} }) {
   const colliders = [];
   const windTime = { value: 0 };
 
-  // Bake glTF models (KayKit, CC0) into instancing-ready geometry; every
-  // variant that failed to load simply isn't offered, and if none loaded we
-  // fall back to the procedural primitives.
-  const bake = (gltf) => bakeToGeometry(gltf, mergeGeometries);
-  const rockVariants = [models.rockA, models.rockB, models.rockC, models.rockD, models.rockE].map(bake).filter(Boolean);
+  // Bake Quaternius nature-pack models (CC0) into instancing-ready geometry:
+  // their per-material flat colours are folded into a vertex-colour attribute
+  // so a single InstancedMesh draws trunk + foliage. If nothing loaded (the
+  // ?noassets path), fall back to the hand-built procedural trees/rocks.
+  const bakeC = (gltf) => bakeColored(gltf, mergeGeometries, { roughness: 0.9 });
+  const commonTrees = [models.treeCommonA, models.treeCommonB, models.treeCommonC].map(bakeC).filter(Boolean);
+  const pineTrees = [models.treePineA, models.treePineB].map(bakeC).filter(Boolean);
+  const willows = [models.treeWillow].map(bakeC).filter(Boolean);
+  const rockVariants = [models.rockA, models.rockB, models.rockC, models.rockMossA, models.rockMossB].map(bakeC).filter(Boolean);
+  const bushVariants = [models.bushA, models.bushB, models.bushBerries].map(bakeC).filter(Boolean);
 
   const defs = [];
-  // Trees are hand-built (see trees.js): organic blob canopies with baked
-  // gradients instead of stacked cones. Several seeds per species so the
-  // forest reads as individuals; tint drift + lean push it further.
-  const broadleafTint = [0xffffff, 0xd6e8c4];
-  const oaks = [oakGeometry(1), oakGeometry(2), oakGeometry(3), birchGeometry(1)];
-  for (const geo of oaks) {
-    defs.push({ geo, per: (isl) => Math.round((isl.radius * 0.24) / oaks.length), scale: [0.85, 1.6], tint: broadleafTint, accent: 0xe8b56a, accentChance: 0.08, lean: 0.06, collideR: 0.17, maxSlope: 0.4, shadow: true, sway: 0.05 });
+  // subtle per-instance shade drift (multiplicative, so it varies toward
+  // shadow) — keeps a forest of the same model from looking cloned. A few
+  // broadleaves get a warm autumn tint.
+  const leafTint = [0xffffff, 0xd7e6bf];
+  if (commonTrees.length) {
+    for (const v of commonTrees) {
+      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round((isl.radius * 0.17) / commonTrees.length), scale: [1.4, 2.5], tint: leafTint, accent: 0xe7b168, accentChance: 0.07, lean: 0.05, collideR: 0.16, maxSlope: 0.4, shadow: true, sway: 0.045 });
+    }
+    for (const v of pineTrees) {
+      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round((isl.radius * 0.09) / pineTrees.length), scale: [1.5, 2.7], tint: [0xffffff, 0xcfe0c2], lean: 0.03, collideR: 0.14, maxSlope: 0.44, shadow: true, sway: 0.035 });
+    }
+    for (const v of willows) {
+      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round(isl.radius * 0.03), scale: [1.6, 2.3], tint: leafTint, lean: 0.04, collideR: 0.16, maxSlope: 0.36, shadow: true, sway: 0.06 });
+    }
+  } else {
+    // procedural fallback (no assets)
+    for (const geo of [oakGeometry(1), oakGeometry(2), birchGeometry(1)]) {
+      defs.push({ geo, per: (isl) => Math.round(isl.radius * 0.08), scale: [0.85, 1.6], tint: leafTint, lean: 0.06, collideR: 0.17, maxSlope: 0.4, shadow: true, sway: 0.05 });
+    }
+    for (const geo of [pineTreeGeometry(1), pineTreeGeometry(2)]) {
+      defs.push({ geo, per: (isl) => Math.round(isl.radius * 0.05), scale: [0.9, 1.55], tint: [0xffffff, 0xcfe0c2], lean: 0.035, collideR: 0.13, maxSlope: 0.42, shadow: true, sway: 0.04 });
+    }
   }
-  const pines = [pineTreeGeometry(1), pineTreeGeometry(2), pineTreeGeometry(3)];
-  for (const geo of pines) {
-    defs.push({ geo, per: (isl) => Math.round((isl.radius * 0.14) / pines.length), scale: [0.9, 1.55], tint: [0xffffff, 0xcfe0c2], lean: 0.035, collideR: 0.13, maxSlope: 0.42, shadow: true, sway: 0.04 });
-  }
-  const bushes = [bushGeometry(1), bushGeometry(2)];
-  for (const geo of bushes) {
-    defs.push({ geo, per: (isl) => Math.round((isl.radius * 0.3) / bushes.length), scale: [0.8, 1.5], tint: broadleafTint, lean: 0.08, collideR: 0, maxSlope: 0.5, shadow: true, sway: 0.09 });
+  if (bushVariants.length) {
+    for (const v of bushVariants) {
+      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round((isl.radius * 0.26) / bushVariants.length), scale: [0.7, 1.35], tint: leafTint, lean: 0.07, collideR: 0, maxSlope: 0.5, shadow: true, sway: 0.09 });
+    }
+  } else {
+    for (const geo of [bushGeometry(1), bushGeometry(2)]) {
+      defs.push({ geo, per: (isl) => Math.round(isl.radius * 0.15), scale: [0.8, 1.5], tint: leafTint, lean: 0.08, collideR: 0, maxSlope: 0.5, shadow: true, sway: 0.09 });
+    }
   }
   if (rockVariants.length) {
     for (const v of rockVariants) {
-      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round((isl.radius * 0.2) / rockVariants.length), scale: [3, 7.5], collideR: 0.14, maxSlope: 0.6, shadow: true });
+      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round((isl.radius * 0.16) / rockVariants.length), scale: [1.1, 3.4], tint: [0xffffff, 0xc7cdd2], collideR: 0.28, maxSlope: 0.6, shadow: true });
     }
   } else {
     defs.push({ geo: rockGeometry(), per: (isl) => Math.round(isl.radius * 0.22), scale: [0.4, 1.5], tint: [0xb9b6ae, 0x74716b], collideR: 1.0, maxSlope: 0.6, shadow: true });

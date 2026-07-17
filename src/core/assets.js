@@ -80,6 +80,39 @@ export function bakeToGeometry(gltf, mergeGeometries) {
   return { geometry: merged, material };
 }
 
+// Bake a multi-material gltf (e.g. Quaternius trees: separate "Wood" and
+// "Green" materials, flat colors, no textures) into ONE geometry whose colors
+// live in a vertex-color attribute — so a single InstancedMesh can draw it and
+// still show every material. Returns { geometry, material } or null.
+export function bakeColored(gltf, mergeGeometries, { roughness = 0.92 } = {}) {
+  if (!gltf) return null;
+  const geos = [];
+  gltf.scene.updateMatrixWorld(true);
+  gltf.scene.traverse((o) => {
+    if (!o.isMesh) return;
+    const g = o.geometry.clone().applyMatrix4(o.matrixWorld);
+    for (const name of Object.keys(g.attributes)) {
+      if (!['position', 'normal'].includes(name)) g.deleteAttribute(name);
+    }
+    const geo = g.toNonIndexed();
+    const n = geo.attributes.position.count;
+    const col = (o.material && o.material.color) || new THREE.Color(0xffffff);
+    const colors = new Float32Array(n * 3);
+    for (let i = 0; i < n; i++) {
+      colors[i * 3] = col.r;
+      colors[i * 3 + 1] = col.g;
+      colors[i * 3 + 2] = col.b;
+    }
+    geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+    geos.push(geo);
+  });
+  if (!geos.length) return null;
+  const merged = mergeGeometries(geos);
+  merged.computeVertexNormals();
+  const material = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness, metalness: 0 });
+  return { geometry: merged, material };
+}
+
 // Prepare a unique (non-instanced) building/prop: enables shadows, applies
 // transform, and returns simple colliders derived from its footprint.
 export function placeModel(gltf, { x, z, y = 0, scale = 1, rotY = 0, colliderShrink = 0.8, collide = true }) {
