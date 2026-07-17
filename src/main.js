@@ -275,6 +275,7 @@ function checkPickups() {
       if (crystalsCollected >= world.crystals.length) {
         const secs = Math.round((performance.now() - playStartTime) / 1000);
         hud.setWinStats(`All ${world.crystals.length} crystals · ${Math.floor(secs / 60)}m ${secs % 60}s`);
+        player.playCheer();
         audio.win();
         setState('win');
         pointerWanted = false;

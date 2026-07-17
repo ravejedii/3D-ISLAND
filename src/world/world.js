@@ -14,6 +14,36 @@ import { RNG } from '../core/rng.js';
 
 const SEED = 20260712;
 
+// Hand-placed dirt paths: spawn -> castle gate, a fork to the west bridge,
+// and a lane to the hamlet. Drawn per-fragment by the terrain shader and
+// kept clear of grass and props, so the world reads as inhabited.
+const PATH_SEGMENTS = [
+  [0, 46, 1, 28],
+  [1, 28, 4, 12],
+  [4, 12, 1, -3], // castle gate
+  [1, 28, -14, 14],
+  [-14, 14, -34, -4],
+  [-34, -4, -48, -16], // west bridge mouth
+  [4, 12, 16, 15],
+  [16, 15, 27, 19], // hamlet well
+];
+
+function distToSegment(px, pz, x1, z1, x2, z2) {
+  const dx = x2 - x1;
+  const dz = z2 - z1;
+  const t = Math.max(0, Math.min(1, ((px - x1) * dx + (pz - z1) * dz) / (dx * dx + dz * dz)));
+  return Math.hypot(px - (x1 + dx * t), pz - (z1 + dz * t));
+}
+
+export function pathDistance(x, z) {
+  let d = Infinity;
+  for (const [x1, z1, x2, z2] of PATH_SEGMENTS) {
+    const s = distToSegment(x, z, x1, z1, x2, z2);
+    if (s < d) d = s;
+  }
+  return d;
+}
+
 export class World {
   constructor(scene, models = {}, { cheapSky = false } = {}) {
     this.cheapSky = cheapSky;
@@ -54,7 +84,11 @@ export class World {
       flatShading: true,
       roughness: 1,
       silent: true,
-      uniforms: { uCliff: { value: new THREE.Color(0x8a8177) } },
+      uniforms: {
+        uCliff: { value: new THREE.Color(0x8a8177) },
+        uPath: { value: new THREE.Color(0xb59468) },
+        uPathSegs: { value: PATH_SEGMENTS.map(([a, b, c, d]) => new THREE.Vector4(a, b, c, d)) },
+      },
       vertexShader: /* glsl */ `
         varying vec3 vWPos;
         varying vec3 vWNormal;
@@ -67,6 +101,13 @@ export class World {
         varying vec3 vWPos;
         varying vec3 vWNormal;
         uniform vec3 uCliff;
+        uniform vec3 uPath;
+        uniform vec4 uPathSegs[8];
+        float distSeg(vec2 p, vec2 a, vec2 b) {
+          vec2 ab = b - a;
+          float t = clamp(dot(p - a, ab) / dot(ab, ab), 0.0, 1.0);
+          return length(p - (a + ab * t));
+        }
         float hash12(vec2 p) {
           vec3 p3 = fract(vec3(p.xyx) * 0.1031);
           p3 += dot(p3, p3.yzx + 33.33);
@@ -94,6 +135,18 @@ export class World {
           float rockMix = smoothstep(0.42, 0.62, slope);
           vec3 cliff = uCliff * (0.75 + vnoise(vWPos.xz * 0.35 + vWPos.y * 0.2) * 0.45);
           base = mix(base, cliff, rockMix * 0.85);
+          // worn dirt paths, wobbled by noise so edges aren't ruler-straight
+          float pd = 1e6;
+          vec2 p = vWPos.xz;
+          for (int i = 0; i < 8; i++) {
+            pd = min(pd, distSeg(p, uPathSegs[i].xy, uPathSegs[i].zw));
+          }
+          pd += (vnoise(p * 0.55) - 0.5) * 0.9;
+          vec3 pathCol = uPath * (0.88 + vnoise(p * 1.7) * 0.24);
+          float onPath = 1.0 - smoothstep(1.05, 1.55, pd);
+          float wornEdge = (1.0 - smoothstep(1.55, 2.6, pd)) * 0.22;
+          base = mix(base, base * 0.9, wornEdge);        // trampled fringe
+          base = mix(base, pathCol, onPath * (1.0 - rockMix));
           csm_DiffuseColor.rgb = base;
         }
       `,
@@ -208,7 +261,8 @@ export class World {
       clearZones.push({ x: br.a.x, z: br.a.z, r: 6 });
       clearZones.push({ x: br.b.x, z: br.b.z, r: 6 });
     }
-    const exclude = (x, z) => clearZones.every((c) => Math.hypot(x - c.x, z - c.z) > c.r);
+    const exclude = (x, z) => clearZones.every((c) => Math.hypot(x - c.x, z - c.z) > c.r)
+      && pathDistance(x, z) > 2.4;
     const props = buildProps(this.islands, { seed: SEED + 99, exclude, models });
     scene.add(props.group);
     this.colliders.push(...props.colliders);

@@ -28,7 +28,19 @@ export class Player {
     this.group = new THREE.Group();
     this.isProcedural = !this.buildModelMesh(knightGltf);
     if (this.isProcedural) this.buildMesh();
+    this.buildLightRig();
     this.group.position.copy(this.position);
+  }
+
+  // Character lighting: a warm fill from the front-top and a cool rim from
+  // behind, parented to the player so the hero always pops from the scene.
+  // No shadows on these — they're cheap accents, not scene lights.
+  buildLightRig() {
+    const fill = new THREE.PointLight(0xfff1d8, 6, 7, 2.2);
+    fill.position.set(0.7, 2.6, 1.5);
+    const rim = new THREE.PointLight(0xa8c8ff, 5, 6, 2.2);
+    rim.position.set(-0.9, 2.3, -1.6);
+    this.group.add(fill, rim);
   }
 
   // Returns true when the glb character was set up successfully.
