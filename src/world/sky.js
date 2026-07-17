@@ -8,8 +8,8 @@ import { RNG, clamp, lerp, smoothstep } from '../core/rng.js';
 const DAY_LENGTH = 240; // seconds per full cycle
 
 const PAL = {
-  day: { top: 0x3a7bd5, horizon: 0xaed6f1, fog: 0xbcd9ec, sun: 0xfff3d6, hemiSky: 0xbfd9ff, hemiGround: 0x8a7f6a },
-  sunset: { top: 0x35418c, horizon: 0xff9d5c, fog: 0xe8b48c, sun: 0xffb46b, hemiSky: 0xd99c7c, hemiGround: 0x6a5a4c },
+  day: { top: 0x3a7bd5, horizon: 0xaed6f1, fog: 0xa4c4e2, sun: 0xfff3d6, hemiSky: 0xbfd9ff, hemiGround: 0x94836a },
+  sunset: { top: 0x35418c, horizon: 0xff9d5c, fog: 0xdca882, sun: 0xffb46b, hemiSky: 0xd99c7c, hemiGround: 0x6a5a4c },
   night: { top: 0x0a1028, horizon: 0x233158, fog: 0x1a2240, sun: 0x9db4ff, hemiSky: 0x33415f, hemiGround: 0x232630 },
 };
 
@@ -112,7 +112,7 @@ export class Sky {
     this.moon.scale.setScalar(110);
     scene.add(this.moon);
 
-    scene.fog = new THREE.Fog(PAL.day.fog, 120, 620);
+    scene.fog = new THREE.Fog(PAL.day.fog, 150, 720);
 
     this._colA = new THREE.Color();
     this.nightFactor = 0;
@@ -170,10 +170,11 @@ export class Sky {
 
     // atmosphere: hazier + more scattering toward sunset, crisp at noon
     if (this.atmo) {
+      // crisp deep-blue midday, hazy amber only near sunset
       this.atmo.sunPosition.value.copy(sunDir);
-      this.atmo.rayleigh.value = lerp(1.4, 3.4, sunsetF);
-      this.atmo.turbidity.value = lerp(5, 9, sunsetF);
-      this.atmo.mieCoefficient.value = lerp(0.0035, 0.008, sunsetF);
+      this.atmo.rayleigh.value = lerp(1.05, 3.2, sunsetF);
+      this.atmo.turbidity.value = lerp(3.2, 8.5, sunsetF);
+      this.atmo.mieCoefficient.value = lerp(0.0028, 0.0075, sunsetF);
     } else {
       this.scene.background.copy(mix3('horizon'));
     }

@@ -253,7 +253,10 @@ kbd {
   align-items: center;
   justify-content: center;
   text-align: center;
-  background: radial-gradient(ellipse at 50% 40%, rgba(8, 14, 30, 0.2), rgba(5, 8, 18, 0.8));
+  /* cinematic scrim: legible type, visible key art in the middle band */
+  background:
+    linear-gradient(180deg, rgba(5, 8, 18, 0.6) 0%, rgba(5, 8, 18, 0.15) 26%, rgba(5, 8, 18, 0.1) 55%, rgba(5, 8, 18, 0.72) 100%),
+    radial-gradient(ellipse at 50% 42%, rgba(8, 14, 30, 0.12), rgba(5, 8, 18, 0.42));
   pointer-events: auto;
   transition: opacity 0.35s;
 }

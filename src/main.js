@@ -111,7 +111,7 @@ if ((!softwareGL && !isMobile) || fxForced) {
     samples: 30,
   });
   // dreamy depth blur, only while the title screen's cinematic camera runs
-  const dof = new DepthOfFieldEffect(camera, { focusDistance: 0.02, focalLength: 0.06, bokehScale: 2.2 });
+  const dof = new DepthOfFieldEffect(camera, { focusDistance: 0.025, focalLength: 0.08, bokehScale: 1.5 });
   dofPass = new EffectPass(camera, dof);
   dofPass.enabled = false;
   composer.addPass(dofPass);
@@ -120,9 +120,9 @@ if ((!softwareGL && !isMobile) || fxForced) {
   composer.addPass(new EffectPass(
     camera,
     godRays,
-    new BloomEffect({ intensity: 0.5, luminanceThreshold: 0.72, luminanceSmoothing: 0.2, mipmapBlur: true }),
-    new HueSaturationEffect({ saturation: 0.16 }),
-    new BrightnessContrastEffect({ contrast: 0.08 }),
+    new BloomEffect({ intensity: 0.42, luminanceThreshold: 0.85, luminanceSmoothing: 0.18, mipmapBlur: true }),
+    new HueSaturationEffect({ saturation: 0.12 }),
+    new BrightnessContrastEffect({ contrast: 0.1 }),
     new VignetteEffect({ offset: 0.28, darkness: 0.5 }),
     grain,
     new ToneMappingEffect({ mode: ToneMappingMode.ACES_FILMIC }),
@@ -202,6 +202,7 @@ function lockPointer() {
 
 function startGame() {
   audio.init();
+  world.sky.setTime(0.22); // begin the run on a fresh morning
   crystalsCollected = 0;
   world.crystals.forEach((c, i) => {
     c.collected = false;
@@ -337,12 +338,18 @@ window.addEventListener('resize', () => {
 });
 
 // ---------- title-screen cinematic camera ----------
-let cinAngle = 0;
+// slow golden-hour dolly around the castle: the title's key art
+let cinAngle = 0.9;
 function cinematicCamera(dt) {
-  cinAngle += dt * 0.045;
-  const r = 95;
-  camera.position.set(Math.cos(cinAngle) * r, 34 + Math.sin(cinAngle * 0.7) * 8, Math.sin(cinAngle) * r);
-  camera.lookAt(0, 8, -10);
+  cinAngle += dt * 0.03;
+  world.sky.setTime(0.455); // hold golden hour while on the title
+  const r = 46 + Math.sin(cinAngle * 0.6) * 4;
+  camera.position.set(
+    Math.cos(cinAngle) * r,
+    17 + Math.sin(cinAngle * 0.8) * 2.5,
+    -18 + Math.sin(cinAngle) * r,
+  );
+  camera.lookAt(0, 13, -18);
 }
 
 // ---------- FPS tracking ----------

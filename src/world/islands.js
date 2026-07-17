@@ -77,11 +77,11 @@ export class Island {
     const indices = [];
     const col = new THREE.Color();
 
-    const grass = new THREE.Color(0x6cb04f);
-    const grassDark = new THREE.Color(0x4f9140);
+    const grass = new THREE.Color(0x7aa758);
+    const grassDark = new THREE.Color(0x5a8a4a);
     const dirt = new THREE.Color(0xa5854f);
-    const stone = new THREE.Color(0x928e88);
-    const rimRock = new THREE.Color(0x8a7660);
+    const stone = new THREE.Color(0x958f86);
+    const rimRock = new THREE.Color(0x8f7a62);
 
     // --- top surface: radial grid with a center fan ---
     const topH = this.heightAt(this.center.x, this.center.z);
@@ -167,7 +167,7 @@ export class Island {
     out.copy(pal.grass).lerp(pal.grassDark, clamp(n * 0.5 + 0.5, 0, 1));
     // warm meadow patches so the grass reads less uniform
     const meadow = fbm(x * 0.028 - 90, z * 0.028 + 55, this.seed + 11, 2);
-    if (meadow > 0.1) out.lerp(new THREE.Color(0x8fb54e), clamp((meadow - 0.1) * 2.2, 0, 0.55));
+    if (meadow > 0.1) out.lerp(new THREE.Color(0x9cab5c), clamp((meadow - 0.1) * 2.2, 0, 0.5));
     if (n > 0.42) out.lerp(pal.dirt, 0.55);
     // cheap baked AO: darken concavities (height below the local average)
     const e = 2.6;
