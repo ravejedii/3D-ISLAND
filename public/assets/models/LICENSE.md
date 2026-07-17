@@ -14,5 +14,3 @@ use without attribution. Credited here with thanks.
   Rock_Moss, Bush, BushBerries). Trees decimated ~40% with
   `scripts/decimate-glb.cjs` (meshoptimizer) for the instanced draw budget;
   colour is unchanged.
-- `characters/KnightQuaternius.glb` — Ultimate Modular Characters / single
-  Knight (rigged, animated).

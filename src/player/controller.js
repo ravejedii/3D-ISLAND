@@ -65,14 +65,18 @@ export class Player {
       model.position.y = -box.min.y * s;
 
       this.mixer = new THREE.AnimationMixer(model);
+      // Clip names differ per pack (KayKit: "Running_A"; Quaternius:
+      // "HumanArmature|Run"), so match either. Quaternius has a single "Jump"
+      // rather than the start/idle/land triple — it maps to jumpStart and the
+      // airborne/land states harmlessly no-op, holding that clip.
       const wanted = {
-        idle: /^Idle$/i,
-        walk: /^Walking_A$/i,
-        run: /^Running_A$/i,
-        jumpStart: /^Jump_Start$/i,
-        jumpIdle: /^Jump_Idle$/i,
-        jumpLand: /^Jump_Land$/i,
-        cheer: /^Cheer$/i,
+        idle: /(^|\|)Idle$/i,
+        walk: /(^|\|)(Walking_A|Walking|Walk)$/i,
+        run: /(^|\|)(Running_A|Run)$/i,
+        jumpStart: /(^|\|)(Jump_Start|Jump)$/i,
+        jumpIdle: /(^|\|)Jump_Idle$/i,
+        jumpLand: /(^|\|)Jump_Land$/i,
+        cheer: /(^|\|)Cheer$/i,
       };
       for (const [key, re] of Object.entries(wanted)) {
         const clip = gltf.animations.find((c) => re.test(c.name));
