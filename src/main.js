@@ -64,11 +64,6 @@ assets.onProgress = (f) => {
 };
 const models = await assets.loadAll({
   knight: 'characters/Knight.glb',
-  treeA: 'nature/tree_single_A.gltf',
-  treeB: 'nature/tree_single_B.gltf',
-  treesLargeA: 'nature/trees_A_large.gltf',
-  treesMediumA: 'nature/trees_A_medium.gltf',
-  treesLargeB: 'nature/trees_B_large.gltf',
   rockA: 'nature/rock_single_A.gltf',
   rockB: 'nature/rock_single_B.gltf',
   rockC: 'nature/rock_single_C.gltf',

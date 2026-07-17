@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RNG, hash2 } from '../core/rng.js';
 import { bakeToGeometry } from '../core/assets.js';
+import { oakGeometry, birchGeometry, pineGeometry as pineTreeGeometry, bushGeometry } from './trees.js';
 
 // Instanced scenery: pine trees, rocks, grass tufts, flowers.
 // Everything is placed with seeded rejection sampling on walkable slopes.
@@ -17,16 +18,6 @@ function colored(geo, hex) {
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
   return geo;
-}
-
-function pineGeometry() {
-  const trunk = colored(new THREE.CylinderGeometry(0.14, 0.22, 1.5, 6).translate(0, 0.75, 0), 0x6d4c33);
-  const c1 = colored(new THREE.ConeGeometry(1.25, 1.9, 7).translate(0, 2.0, 0), 0x3c7a3a);
-  const c2 = colored(new THREE.ConeGeometry(0.95, 1.6, 7).translate(0, 3.0, 0), 0x458a41);
-  const c3 = colored(new THREE.ConeGeometry(0.6, 1.3, 7).translate(0, 3.95, 0), 0x529a4a);
-  const g = mergeGeometries([trunk.toNonIndexed(), c1.toNonIndexed(), c2.toNonIndexed(), c3.toNonIndexed()]);
-  g.computeVertexNormals();
-  return g;
 }
 
 function rockGeometry() {
@@ -92,24 +83,24 @@ export function buildProps(islands, { seed = 909, exclude, models = {} }) {
   // variant that failed to load simply isn't offered, and if none loaded we
   // fall back to the procedural primitives.
   const bake = (gltf) => bakeToGeometry(gltf, mergeGeometries);
-  const treeVariants = [models.treeA, models.treeB, models.treesMediumA].map(bake).filter(Boolean);
-  const forestVariants = [models.treesLargeA, models.treesLargeB].map(bake).filter(Boolean);
   const rockVariants = [models.rockA, models.rockB, models.rockC, models.rockD, models.rockE].map(bake).filter(Boolean);
 
   const defs = [];
-  if (treeVariants.length) {
-    // per-tree tint drift (multiplies the atlas texture), slight random lean,
-    // and a wide size range — kills the cloned-plastic-cone look. A few trees
-    // get a golden autumn accent.
-    const treeTint = [0xfdf2da, 0xc2dfae];
-    for (const v of treeVariants) {
-      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round((isl.radius * 0.28) / treeVariants.length), scale: [2.3, 5.2], tint: treeTint, accent: 0xf2c98a, accentChance: 0.09, lean: 0.075, collideR: 0.09, maxSlope: 0.4, shadow: true, sway: 0.05 });
-    }
-    for (const v of forestVariants) {
-      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round((isl.radius * 0.06) / forestVariants.length), scale: [3.2, 5], tint: treeTint, accentChance: 0, lean: 0.03, collideR: 0.3, maxSlope: 0.32, shadow: true, sway: 0.04 });
-    }
-  } else {
-    defs.push({ geo: pineGeometry(), per: (isl) => Math.round(isl.radius * 0.55), scale: [0.8, 1.7], tint: [0x9adf8a, 0x5d8a52], collideR: 0.4, maxSlope: 0.4, shadow: true, sway: 0.05 });
+  // Trees are hand-built (see trees.js): organic blob canopies with baked
+  // gradients instead of stacked cones. Several seeds per species so the
+  // forest reads as individuals; tint drift + lean push it further.
+  const broadleafTint = [0xffffff, 0xd6e8c4];
+  const oaks = [oakGeometry(1), oakGeometry(2), oakGeometry(3), birchGeometry(1)];
+  for (const geo of oaks) {
+    defs.push({ geo, per: (isl) => Math.round((isl.radius * 0.24) / oaks.length), scale: [0.85, 1.6], tint: broadleafTint, accent: 0xe8b56a, accentChance: 0.08, lean: 0.06, collideR: 0.17, maxSlope: 0.4, shadow: true, sway: 0.05 });
+  }
+  const pines = [pineTreeGeometry(1), pineTreeGeometry(2), pineTreeGeometry(3)];
+  for (const geo of pines) {
+    defs.push({ geo, per: (isl) => Math.round((isl.radius * 0.14) / pines.length), scale: [0.9, 1.55], tint: [0xffffff, 0xcfe0c2], lean: 0.035, collideR: 0.13, maxSlope: 0.42, shadow: true, sway: 0.04 });
+  }
+  const bushes = [bushGeometry(1), bushGeometry(2)];
+  for (const geo of bushes) {
+    defs.push({ geo, per: (isl) => Math.round((isl.radius * 0.3) / bushes.length), scale: [0.8, 1.5], tint: broadleafTint, lean: 0.08, collideR: 0, maxSlope: 0.5, shadow: true, sway: 0.09 });
   }
   if (rockVariants.length) {
     for (const v of rockVariants) {
