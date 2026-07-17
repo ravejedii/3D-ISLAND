@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Island } from './islands.js';
 import { Bridge } from './bridges.js';
-import { buildCastle, buildGateTorches } from './castle.js';
+import { buildCastle, buildCourtyard } from './castle.js';
 import { placeModel } from '../core/assets.js';
 import CustomShaderMaterial from 'three-custom-shader-material/vanilla';
 import { buildProps } from './props.js';
@@ -191,16 +191,20 @@ export class World {
     this.windowsMaterial = null;
     this.torchLight = null;
     this.torchFlames = [];
+    // The model keep sits at the back of a walled bailey you can actually
+    // walk into through the south gate.
     const placedCastle = placeModel(models.castle, {
-      x: castlePos.x, z: castlePos.z, y: 6.45, scale: 4.2, rotY: 0, colliderShrink: 0.6,
+      x: castlePos.x, z: castlePos.z - 6.5, y: 6.45, scale: 4.2, rotY: 0, colliderShrink: 0.6,
     });
     if (placedCastle) {
       scene.add(placedCastle.model);
       this.colliders.push(...placedCastle.colliders);
-      const torches = buildGateTorches({ x: castlePos.x, y: 6.45, z: castlePos.z + 5.2, spread: 2.6 });
-      scene.add(torches.group);
-      this.torchLight = torches.light;
-      this.torchFlames = torches.flames;
+      // cool gray stone to match the keep model
+      const courtyard = buildCourtyard({ x: castlePos.x, z: castlePos.z, groundY: 6.45, stone: 0x99a0aa, stoneDark: 0x7e8590, roof: 0x3f6f92 });
+      scene.add(courtyard.group);
+      this.colliders.push(...courtyard.colliders);
+      this.torchLight = courtyard.torchLight;
+      this.torchFlames = courtyard.flames;
     } else {
       const castle = buildCastle({ x: castlePos.x, z: castlePos.z, groundY: 6.5 });
       scene.add(castle.group);
@@ -287,10 +291,9 @@ export class World {
   buildCrystals() {
     const rng = new RNG(SEED + 500);
     // polar (island, angle, radiusFrac); one is inside the keep
-    // First crystal sits behind the castle on the plateau when the solid
-    // castle model is in use (no walkable interior), inside the keep otherwise.
+    // First crystal waits inside the castle courtyard, past the gate.
     const keepSpot = this.models.castle
-      ? { isl: this.main, x: -13, z: -31 }
+      ? { isl: this.main, x: 5.5, z: -10 }
       : { isl: this.main, x: this.castleCenter.x, z: this.castleCenter.z - 18 * 0.35 };
     const spots = [
       keepSpot,

@@ -179,10 +179,12 @@ export class Player {
         mz /= mag;
         mag = 1;
       }
+      // camera sits at +(sin yaw, cos yaw) looking back at the player, so
+      // screen-up (mz = -1) must map to -(sin yaw, cos yaw)
       const sin = Math.sin(camYaw);
       const cos = Math.cos(camYaw);
-      dirX = (mx * cos - mz * sin) / mag;
-      dirZ = (mx * sin + mz * cos) / mag;
+      dirX = (mx * cos + mz * sin) / mag;
+      dirZ = (-mx * sin + mz * cos) / mag;
     }
 
     // stick pushed to the rim counts as running

@@ -52,6 +52,26 @@ test('player moves with WASD and stays on the island', async ({ page }) => {
   await page.waitForFunction(() => window.__game.grounded, { timeout: 5000 });
 });
 
+test('movement stays camera-relative after the view rotates', async ({ page }) => {
+  await boot(page);
+  await startSettled(page);
+  // camera east of the player looking west: W must move the player west (-x)
+  await page.evaluate(() => window.__game.setYaw(Math.PI / 2));
+  await page.waitForTimeout(300);
+  const before = await page.evaluate(() => window.__game.playerPos);
+  await page.keyboard.down('w');
+  await page.waitForFunction(({ x, z }) => {
+    const p = window.__game.playerPos;
+    return Math.hypot(p.x - x, p.z - z) > 3;
+  }, before, { timeout: 20000 });
+  await page.keyboard.up('w');
+  const after = await page.evaluate(() => window.__game.playerPos);
+  const dx = after.x - before.x;
+  const dz = after.z - before.z;
+  expect(dx).toBeLessThan(-2); // moved west, away from the camera
+  expect(Math.abs(dz)).toBeLessThan(Math.abs(dx)); // and not sideways
+});
+
 test('player can jump and lands again', async ({ page }) => {
   await boot(page);
   await startSettled(page);
@@ -97,7 +117,7 @@ test('falling off the island respawns the player', async ({ page }) => {
 });
 
 // Steer the player through waypoints by aiming the camera and holding W —
-// a real playthrough, no teleports. Forward with mz=-1 is (sin yaw, -cos yaw).
+// a real playthrough, no teleports. Forward with mz=-1 is -(sin yaw, cos yaw).
 async function walkTo(page, waypoints, { run = true, timeout = 100000 } = {}) {
   await page.keyboard.down('w');
   if (run) await page.keyboard.down('Shift');
@@ -129,7 +149,7 @@ async function walkTo(page, waypoints, { run = true, timeout = 100000 } = {}) {
       stall = 0;
     }
     last = p;
-    await page.evaluate((yaw) => window.__game.setYaw(yaw), Math.atan2(dx, -dz));
+    await page.evaluate((yaw) => window.__game.setYaw(yaw), Math.atan2(-dx, -dz));
     await page.waitForTimeout(120);
   }
   if (run) await page.keyboard.up('Shift');
@@ -153,6 +173,19 @@ test('walks from spawn across a bridge to a satellite island (no teleports)', as
   // standing on the satellite island, not fallen into the void
   expect(pos.y).toBeGreaterThan(0);
   expect(await page.evaluate(() => window.__game.grounded)).toBe(true);
+});
+
+test('castle courtyard is enterable through the south gate', async ({ page }) => {
+  test.setTimeout(90000);
+  await boot(page);
+  await startSettled(page);
+  await page.evaluate(() => window.__game.teleport(0, 6));
+  await page.waitForTimeout(400);
+  // through the gate (x in ±2.5 at z=-4), then to the crystal spot inside
+  await walkTo(page, [[0, -9], [5.5, -11]], { timeout: 60000 });
+  const p = await page.evaluate(() => window.__game.playerPos);
+  expect(p.z).toBeLessThan(-6); // past the south wall
+  expect(Math.abs(p.x)).toBeLessThan(13); // inside the courtyard, not around it
 });
 
 test('bridges are walkable ground', async ({ page }) => {

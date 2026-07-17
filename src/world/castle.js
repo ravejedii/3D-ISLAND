@@ -28,15 +28,7 @@ const STONE_DARK = 0x9a8f7d;
 const ROOF = 0x4f7d8c;
 const WOOD = 0x6d4c33;
 
-export function buildCastle({ x, z, groundY }) {
-  const geos = [];
-  const colliders = [];
-  const y0 = groundY;
-
-  const half = 14; // courtyard half-size
-  const wallH = 5.2;
-  const wallT = 1.3;
-
+function makeBuilders(geos, colliders) {
   const addBox = (w, h, d, cx, cy, cz, hex, collide = true, rotY = 0) => {
     const g = new THREE.BoxGeometry(w, h, d);
     if (rotY) g.rotateY(rotY);
@@ -68,6 +60,25 @@ export function buildCastle({ x, z, groundY }) {
     g.translate(cx, cy, cz);
     geos.push(colored(g, hex));
   };
+
+  return { addBox, addCylinder, addCone };
+}
+
+// Curtain walls, corner towers and a south gatehouse around a courtyard.
+// Used standalone around the glTF castle keep, and by the procedural
+// fallback castle below. Walk in through the south gate.
+export function buildCourtyard({ x, z, groundY, stone = STONE, stoneDark = STONE_DARK, roof = ROOF }) {
+  const geos = [];
+  const colliders = [];
+  const { addBox, addCylinder, addCone } = makeBuilders(geos, colliders);
+  const y0 = groundY;
+  const STONE = stone;
+  const STONE_DARK = stoneDark;
+  const ROOF = roof;
+
+  const half = 14; // courtyard half-size
+  const wallH = 5.2;
+  const wallT = 1.3;
 
   // --- outer walls (gate gap on the south side) ---
   // walls extend 2.5 below ground level so terrain undulation never shows sky
@@ -121,6 +132,43 @@ export function buildCastle({ x, z, groundY }) {
     addCone(1.9, 2.4, x + side * (gateW / 2 + 1.1), y0 + 7 + 1.2, z + half, ROOF, 8);
   }
 
+  // banners on gatehouse
+  for (const side of [-1, 1]) {
+    const pole = new THREE.CylinderGeometry(0.05, 0.05, 2.6, 5);
+    pole.translate(x + side * (gateW / 2 + 1.1), y0 + 9.4, z + half);
+    geos.push(colored(pole, WOOD));
+    const flag = new THREE.BoxGeometry(1.5, 0.9, 0.05);
+    flag.translate(x + side * (gateW / 2 + 1.1) + 0.8, y0 + 10.2, z + half);
+    geos.push(colored(flag, 0xd8574a));
+  }
+
+  const merged = mergeGeometries(geos.map((g) => g.toNonIndexed()));
+  merged.computeVertexNormals();
+  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95 });
+  const mesh = new THREE.Mesh(merged, mat);
+  mesh.castShadow = true;
+  mesh.receiveShadow = true;
+
+  const group = new THREE.Group();
+  group.add(mesh);
+
+  // gate torches: two flame sprites + one shared flickering light
+  const torches = buildGateTorches({ x, y: y0, z: z + half, spread: gateW / 2 + 0.6 });
+  group.add(torches.group);
+
+  return { group, colliders, torchLight: torches.light, flames: torches.flames, half, gateW };
+}
+
+export function buildCastle({ x, z, groundY }) {
+  const geos = [];
+  const colliders = [];
+  const { addBox, addCylinder, addCone } = makeBuilders(geos, colliders);
+  const y0 = groundY;
+  const half = 14;
+  const sink = 2.5;
+  const courtyard = buildCourtyard({ x, z, groundY });
+  colliders.push(...courtyard.colliders);
+
   // --- central keep (enter through the south door) ---
   const keepW = 11, keepD = 9, keepH = 9;
   const kz = z - half * 0.35;
@@ -148,16 +196,6 @@ export function buildCastle({ x, z, groundY }) {
   addBox(0.35, doorH, 1.4, x - doorW / 2, y0 + doorH / 2, kz + keepD / 2, WOOD, false);
   addBox(0.35, doorH, 1.4, x + doorW / 2, y0 + doorH / 2, kz + keepD / 2, WOOD, false);
 
-  // banners on gatehouse
-  for (const side of [-1, 1]) {
-    const pole = new THREE.CylinderGeometry(0.05, 0.05, 2.6, 5);
-    pole.translate(x + side * (gateW / 2 + 1.1), y0 + 9.4, z + half);
-    geos.push(colored(pole, WOOD));
-    const flag = new THREE.BoxGeometry(1.5, 0.9, 0.05);
-    flag.translate(x + side * (gateW / 2 + 1.1) + 0.8, y0 + 10.2, z + half);
-    geos.push(colored(flag, 0xd8574a));
-  }
-
   const merged = mergeGeometries(geos.map((g) => g.toNonIndexed()));
   merged.computeVertexNormals();
   const mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95 });
@@ -183,13 +221,9 @@ export function buildCastle({ x, z, groundY }) {
   const winMesh = new THREE.Mesh(mergeGeometries(winGeos), windowsMaterial);
 
   const group = new THREE.Group();
-  group.add(mesh, winMesh);
+  group.add(mesh, winMesh, courtyard.group);
 
-  // gate torches: two flame sprites + one shared flickering light
-  const torches = buildGateTorches({ x, y: y0, z: z + half, spread: gateW / 2 + 0.6 });
-  group.add(torches.group);
-
-  return { group, colliders, windowsMaterial, torchLight: torches.light, flames: torches.flames };
+  return { group, colliders, windowsMaterial, torchLight: courtyard.torchLight, flames: courtyard.flames };
 }
 
 // Two torch flames + a shared flickering point light — used at the gate of
