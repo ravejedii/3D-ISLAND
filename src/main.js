@@ -111,7 +111,7 @@ if ((!softwareGL && !isMobile) || fxForced) {
     samples: 30,
   });
   // dreamy depth blur, only while the title screen's cinematic camera runs
-  const dof = new DepthOfFieldEffect(camera, { focusDistance: 0.02, focalLength: 0.06, bokehScale: 3.2 });
+  const dof = new DepthOfFieldEffect(camera, { focusDistance: 0.02, focalLength: 0.06, bokehScale: 2.2 });
   dofPass = new EffectPass(camera, dof);
   dofPass.enabled = false;
   composer.addPass(dofPass);
