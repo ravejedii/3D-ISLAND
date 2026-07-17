@@ -98,11 +98,15 @@ export function buildProps(islands, { seed = 909, exclude, models = {} }) {
 
   const defs = [];
   if (treeVariants.length) {
+    // per-tree tint drift (multiplies the atlas texture), slight random lean,
+    // and a wide size range — kills the cloned-plastic-cone look. A few trees
+    // get a golden autumn accent.
+    const treeTint = [0xfdf2da, 0xc2dfae];
     for (const v of treeVariants) {
-      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round((isl.radius * 0.28) / treeVariants.length), scale: [2.8, 4.6], collideR: 0.09, maxSlope: 0.4, shadow: true, sway: 0.05 });
+      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round((isl.radius * 0.28) / treeVariants.length), scale: [2.3, 5.2], tint: treeTint, accent: 0xf2c98a, accentChance: 0.09, lean: 0.075, collideR: 0.09, maxSlope: 0.4, shadow: true, sway: 0.05 });
     }
     for (const v of forestVariants) {
-      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round((isl.radius * 0.06) / forestVariants.length), scale: [3.4, 4.8], collideR: 0.3, maxSlope: 0.32, shadow: true, sway: 0.04 });
+      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round((isl.radius * 0.06) / forestVariants.length), scale: [3.2, 5], tint: treeTint, accentChance: 0, lean: 0.03, collideR: 0.3, maxSlope: 0.32, shadow: true, sway: 0.04 });
     }
   } else {
     defs.push({ geo: pineGeometry(), per: (isl) => Math.round(isl.radius * 0.55), scale: [0.8, 1.7], tint: [0x9adf8a, 0x5d8a52], collideR: 0.4, maxSlope: 0.4, shadow: true, sway: 0.05 });
@@ -158,13 +162,16 @@ export function buildProps(islands, { seed = 909, exclude, models = {} }) {
       const p = placements[i];
       const s = rng.range(def.scale[0], def.scale[1]);
       dummy.position.set(p.x, p.y - 0.05, p.z);
-      dummy.rotation.set(0, rng.range(0, Math.PI * 2), 0);
+      const lean = def.lean || 0;
+      dummy.rotation.set(rng.range(-lean, lean), rng.range(0, Math.PI * 2), rng.range(-lean, lean));
       dummy.scale.setScalar(s);
       dummy.updateMatrix();
       mesh.setMatrixAt(i, dummy.matrix);
       if (def.tint) {
         if (def.palette) {
           tintColor.set(rng.pick(def.tint));
+        } else if (def.accentChance && rng.next() < def.accentChance) {
+          tintColor.set(def.accent); // the odd golden tree
         } else {
           baseA.set(def.tint[0]);
           baseB.set(def.tint[1]);
