@@ -1,0 +1,24 @@
+{
+  "goal": "Write a 200-word plain-English explainer of what an agentic 'loop' is and when it is worth building, aimed at a smart non-engineer. Save the final version to explainer.md in the working directory.",
+  "workdir": ".",
+  "router": {
+    "model": "claude-haiku-4-5-20251001"
+  },
+  "worker": {
+    "model": "claude-sonnet-5",
+    "allowed_tools": ["Read", "Write"],
+    "permission_mode": "acceptEdits"
+  },
+  "rubric_gate": {
+    "criteria": [
+      "A smart non-engineer could understand it with zero jargon left unexplained",
+      "It concretely explains the verify/gate step, not just 'the AI repeats'",
+      "It states at least one honest case where a loop is NOT worth it",
+      "It is between 180 and 220 words and reads cleanly"
+    ],
+    "threshold": 8,
+    "model": "claude-sonnet-5"
+  },
+  "max_iterations": 6,
+  "max_cost_usd": 3.0
+}

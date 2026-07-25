@@ -1,0 +1,21 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "router-loop"
+version = "0.1.0"
+description = "A self-driving agentic loop (DISCOVER->PLAN->EXECUTE->VERIFY->ITERATE) backed by your Claude subscription via the Claude Code CLI."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+dependencies = []
+
+[project.scripts]
+router-loop = "router_loop.cli:main"
+
+[project.optional-dependencies]
+dev = ["pytest"]
+
+[tool.setuptools]
+packages = ["router_loop"]

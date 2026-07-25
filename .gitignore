@@ -3,3 +3,6 @@ dist/
 test-results/
 playwright-report/
 *.log
+
+# router-loop state
+.router/

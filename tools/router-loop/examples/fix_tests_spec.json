@@ -1,0 +1,16 @@
+{
+  "goal": "Every test under ./tests passes, and `python -m pyflakes .` reports no errors. Fix the smallest, highest-impact failure each iteration; do not weaken or delete tests to make them pass.",
+  "workdir": ".",
+  "_note": "No model fields => defaults apply: deciders (router + verifier) are Fable->Opus, worker is Sonnet.",
+  "worker": {
+    "allowed_tools": ["Read", "Edit", "Write", "Bash"],
+    "permission_mode": "acceptEdits",
+    "max_turns": 40
+  },
+  "command_gate": {
+    "command": "python -m pytest -q && python -m pyflakes .",
+    "timeout_seconds": 600
+  },
+  "max_iterations": 8,
+  "max_cost_usd": 5.0
+}

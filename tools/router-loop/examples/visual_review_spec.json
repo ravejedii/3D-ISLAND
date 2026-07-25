@@ -1,0 +1,15 @@
+{
+  "goal": "Redesign the landing-page hero to feel more premium: stronger type hierarchy, more generous spacing, a confident headline. Each iteration, make the change, then render the page and save a screenshot to ./hero.png so it can be reviewed.",
+  "workdir": ".",
+  "_note": "Taste is a judgment call, so the gate is a human -- zero tokens, no LLM grading its own screenshots. The worker produces hero.png once per pass; you look and either approve or give feedback that is remembered for the next pass. Requires an interactive terminal (not for scheduled runs). See docs/GATES.md.",
+  "worker": {
+    "allowed_tools": ["Read", "Edit", "Write", "Bash"],
+    "permission_mode": "acceptEdits",
+    "max_turns": 40
+  },
+  "human_gate": {
+    "prompt": "Does the hero look premium? Approve to finish, or tell me exactly what's off (spacing, weight, color, copy).",
+    "evidence_hint": "open ./hero.png"
+  },
+  "max_iterations": 6
+}
