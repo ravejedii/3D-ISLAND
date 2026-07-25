@@ -121,6 +121,37 @@ html, body {
   box-shadow: var(--shadow);
 }
 
+/* ---------- reusable frame primitive ----------
+   A gilded hairline (real gradient border via mask, not a flat stroke) plus an
+   engraved inner edge (light-above/dark-below hairline, like bevelled metal).
+   Applied to every surface that would otherwise read as a glass rounded-rect:
+   HUD cards, panels, buttons, the hint bar and the title plaque. */
+.card, .panel, .btn, .hints, .title-stack {
+  position: relative;
+}
+.card::before, .panel::before, .btn::before, .hints::before, .title-stack::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 2px;
+  background: linear-gradient(160deg, var(--gold-1), rgba(232, 201, 106, 0.28) 45%, var(--gold-3) 80%, var(--gold-1));
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  mask-composite: exclude;
+  opacity: 0.85;
+  pointer-events: none;
+}
+.card::after, .panel::after, .hints::after, .title-stack::after {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  border-radius: inherit;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.14), inset 0 -1px 0 rgba(0, 0, 0, 0.32);
+  pointer-events: none;
+}
+
 /* ---------- HUD ---------- */
 .hud { position: absolute; inset: 0; transition: opacity 0.3s; }
 .hud.hidden { opacity: 0; }
@@ -274,19 +305,55 @@ kbd {
 }
 .screen.hidden { opacity: 0; pointer-events: none; visibility: hidden; }
 
-.title-stack { display: flex; flex-direction: column; align-items: center; gap: 18px; animation: stack-in 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+.title-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  padding: 40px 58px 34px;
+  background: linear-gradient(180deg, rgba(8, 13, 26, 0.24), rgba(8, 13, 26, 0.36));
+  border-radius: 4px;
+  animation: stack-in 0.9s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
 @keyframes stack-in { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: translateY(0); } }
+
+/* corner flourishes: ornamented-corner bracket + gem accent, framing the plaque */
+.title-stack .flourish { position: absolute; width: 34px; height: 34px; pointer-events: none; }
+.title-stack .flourish i { position: absolute; inset: 0; border: 2px solid var(--gold-2); opacity: 0.85; }
+.title-stack .flourish::after {
+  content: '';
+  position: absolute;
+  width: 7px;
+  height: 7px;
+  background: linear-gradient(135deg, var(--gold-1), var(--gold-3));
+  transform: rotate(45deg);
+  box-shadow: 0 0 6px rgba(232, 201, 106, 0.6);
+}
+.title-stack .flourish-tl { top: -15px; left: -16px; }
+.title-stack .flourish-tl i { border-right: 0; border-bottom: 0; border-top-left-radius: 6px; }
+.title-stack .flourish-tl::after { top: -4px; left: -4px; }
+.title-stack .flourish-tr { top: -15px; right: -16px; }
+.title-stack .flourish-tr i { border-left: 0; border-bottom: 0; border-top-right-radius: 6px; }
+.title-stack .flourish-tr::after { top: -4px; right: -4px; }
+.title-stack .flourish-bl { bottom: -15px; left: -16px; }
+.title-stack .flourish-bl i { border-right: 0; border-top: 0; border-bottom-left-radius: 6px; }
+.title-stack .flourish-bl::after { bottom: -4px; left: -4px; }
+.title-stack .flourish-br { bottom: -15px; right: -16px; }
+.title-stack .flourish-br i { border-left: 0; border-top: 0; border-bottom-right-radius: 6px; }
+.title-stack .flourish-br::after { bottom: -4px; right: -4px; }
 
 .eyebrow {
   color: var(--ink-faint);
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 6px;
+  font-family: var(--font-display);
+  font-size: 12.5px;
+  font-weight: 600;
+  letter-spacing: 5px;
 }
 
 .ornament { display: flex; align-items: center; gap: 12px; color: var(--gold-2); font-size: 13px; opacity: 0.9; }
 .ornament i { display: block; width: 90px; height: 1px; background: linear-gradient(90deg, transparent, var(--gold-2)); }
 .ornament i:last-child { background: linear-gradient(90deg, var(--gold-2), transparent); }
+.ornament .crest { display: flex; filter: drop-shadow(0 0 6px rgba(232, 201, 106, 0.75)); }
 
 .screen h1 {
   font-family: var(--font-display);
@@ -366,11 +433,12 @@ kbd {
 /* buttons */
 .btn {
   pointer-events: auto;
-  font-family: var(--font-body);
+  font-family: var(--font-display);
   padding: 15px 46px;
-  font-size: 16.5px;
-  font-weight: 800;
-  letter-spacing: 1.5px;
+  font-size: 15.5px;
+  font-weight: 700;
+  letter-spacing: 2.5px;
+  text-transform: uppercase;
   border: none;
   border-radius: 14px;
   cursor: pointer;
@@ -460,8 +528,8 @@ kbd {
   position: absolute;
   top: 70px;
   right: 20px;
-  width: 42px;
-  height: 42px;
+  width: 44px;
+  height: 44px;
   border-radius: 12px;
   border: 1px solid var(--stroke);
   background: var(--panel);

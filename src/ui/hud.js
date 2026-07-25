@@ -4,6 +4,9 @@ export class HUD {
   constructor(root) {
     this.root = root;
     const gemSvg = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><defs><linearGradient id="gemg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a5f3ff"/><stop offset="0.6" stop-color="#4f9cff"/><stop offset="1" stop-color="#2b6fd4"/></linearGradient></defs><path fill="url(#gemg)" d="M12 2 20 9.2 12 22 4 9.2Z"/><path fill="rgba(255,255,255,0.5)" d="M12 2 20 9.2H4Z" opacity="0.5"/></svg>`;
+    // gold crest gem: the sky-crystal motif re-tinted, used as the title emblem
+    const crestSvg = `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><defs><linearGradient id="crestg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fdf6d8"/><stop offset="0.55" stop-color="#e8c96a"/><stop offset="1" stop-color="#b9903c"/></linearGradient></defs><path fill="url(#crestg)" d="M12 2 20 9.2 12 22 4 9.2Z"/><path fill="rgba(255,255,255,0.55)" d="M12 2 20 9.2H4Z" opacity="0.5"/></svg>`;
+    const flourishes = ['tl', 'tr', 'bl', 'br'].map((c) => `<i class="flourish flourish-${c}" aria-hidden="true"><i></i></i>`).join('');
     const keys = (list) => list.map(([k, v]) => `<span class="keyhint"><kbd>${k}</kbd>${v}</span>`).join('');
     const controlChips = keys([['WASD', 'move'], ['Shift', 'run'], ['Space', 'jump'], ['Mouse', 'look'], ['Scroll', 'zoom'], ['M', 'mute']]);
 
@@ -24,8 +27,9 @@ export class HUD {
 
       <div class="screen" id="title-screen">
         <div class="title-stack">
+          ${flourishes}
           <p class="eyebrow">A&nbsp;SKY-KINGDOM&nbsp;ADVENTURE</p>
-          <div class="ornament" aria-hidden="true"><i></i><span>✦</span><i></i></div>
+          <div class="ornament" aria-hidden="true"><i></i><span class="crest">${crestSvg}</span><i></i></div>
           <h1>FLOATING ISLES</h1>
           <p class="subtitle">A scattered kingdom drifts in the endless sky.<br/>Recover the <b>10 lost sky crystals</b> hidden across the islands.</p>
           <button class="btn btn-primary" id="btn-play">Begin the Journey</button>
