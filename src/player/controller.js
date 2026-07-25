@@ -20,7 +20,9 @@ export class Player {
     this.heading = Math.PI; // start facing north, toward the castle
     this.radius = 0.45;
     this.walkPhase = 0;
+    this.strideDist = 0;
     this.fellCallback = null;
+    this.onFootstep = null;
     this.mixer = null;
     this.actions = {};
     this.currentAction = null;
@@ -291,9 +293,10 @@ export class Player {
     this.position.y += this.velocity.y * dt;
     const ground = world.groundHeight(this.position.x, this.position.z);
     if (this.velocity.y <= 0 && this.position.y <= ground) {
+      const impactSpeed = -this.velocity.y;
       this.position.y = ground;
       this.velocity.y = 0;
-      if (!this.grounded && this.onLand) this.onLand();
+      if (!this.grounded && this.onLand) this.onLand(impactSpeed);
       this.grounded = true;
     } else if (this.grounded && this.position.y - ground < MAX_STEP && this.velocity.y <= 0) {
       // snap down when walking over small dips
@@ -317,6 +320,20 @@ export class Player {
     this.group.rotation.y = this.heading;
 
     const hSpeed = Math.hypot(this.velocity.x, this.velocity.z);
+
+    // footstep cadence: a step every fixed stride length traveled, so pace
+    // scales naturally with speed (walk vs. run) without touching animation.
+    if (this.grounded && hSpeed > 0.6) {
+      this.strideDist += hSpeed * dt;
+      const stride = 1.75;
+      if (this.strideDist >= stride) {
+        this.strideDist -= stride;
+        if (this.onFootstep) this.onFootstep(hSpeed);
+      }
+    } else {
+      this.strideDist = 0;
+    }
+
     if (this.mixer) {
       // glb character: drive the AnimationMixer state machine
       if (!this.grounded) {

@@ -18,6 +18,7 @@ import { ThirdPersonCamera } from './player/camera.js';
 import { HUD } from './ui/hud.js';
 import { TouchControls, detectMobile } from './ui/touch.js';
 import { GameAudio } from './audio.js';
+import { makeDustPuffs } from './effects/dust.js';
 
 const canvas = document.getElementById('game-canvas');
 
@@ -268,7 +269,15 @@ player.fellCallback = () => {
   audio.fall();
 };
 player.onJump = () => audio.jump();
-player.onLand = () => audio.land();
+const dust = makeDustPuffs(scene);
+player.onLand = (impactSpeed) => {
+  audio.land(impactSpeed);
+  dust.landing(player.position, impactSpeed);
+};
+player.onFootstep = (speed) => {
+  dust.footstep(player.position, speed);
+  audio.footstep(speed);
+};
 
 // ---------- crystal pickup ----------
 const burst = makeBurst(scene);
@@ -479,6 +488,7 @@ function tick() {
     world.update(dt, elapsed, player.position);
   }
   burst.update(dt);
+  dust.update(dt);
 
   if (composerActive) {
     if (dofPass) dofPass.enabled = state === 'title'; // dreamy blur only on the title cinematic

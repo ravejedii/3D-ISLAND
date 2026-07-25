@@ -123,20 +123,45 @@ export class GameAudio {
     this.chime(392, 0, 0.18, 0.05);
   }
 
-  land() {
+  land(impactSpeed = 6) {
     if (!this.ctx) return;
     const ctx = this.ctx;
     const t = ctx.currentTime;
+    const s = Math.min(1, impactSpeed / 14);
     const osc = ctx.createOscillator();
     osc.type = 'sine';
     osc.frequency.setValueAtTime(150, t);
     osc.frequency.exponentialRampToValueAtTime(60, t + 0.12);
     const g = ctx.createGain();
-    g.gain.setValueAtTime(0.12, t);
-    g.gain.exponentialRampToValueAtTime(0.001, t + 0.14);
+    g.gain.setValueAtTime(0.04 + s * 0.14, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.1 + s * 0.08);
     osc.connect(g).connect(this.master);
     osc.start(t);
-    osc.stop(t + 0.16);
+    osc.stop(t + 0.2);
+  }
+
+  // quiet cadence tick for a footfall — a filtered noise tap, throttled by
+  // the controller's stride cadence rather than here
+  footstep(speed = 6) {
+    if (!this.ctx) return;
+    const ctx = this.ctx;
+    const t = ctx.currentTime;
+    const len = Math.floor(ctx.sampleRate * 0.05);
+    const buf = ctx.createBuffer(1, len, ctx.sampleRate);
+    const data = buf.getChannelData(0);
+    for (let i = 0; i < len; i++) data[i] = (Math.random() * 2 - 1) * (1 - i / len);
+    const src = ctx.createBufferSource();
+    src.buffer = buf;
+    const bp = ctx.createBiquadFilter();
+    bp.type = 'lowpass';
+    bp.frequency.value = 380;
+    const g = ctx.createGain();
+    const vol = 0.02 + Math.min(1, speed / 12) * 0.03;
+    g.gain.setValueAtTime(vol, t);
+    g.gain.exponentialRampToValueAtTime(0.001, t + 0.045);
+    src.connect(bp).connect(g).connect(this.master);
+    src.start(t);
+    src.stop(t + 0.05);
   }
 
   win() {
