@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { updatePainterlyLighting } from '../render/painterly.js';
+import { makeCloudDome } from '../render/clouds.js';
 import { Sky as AtmoSky } from 'three/addons/objects/Sky.js';
 import { RNG, clamp, lerp, smoothstep } from '../core/rng.js';
 
@@ -38,6 +39,16 @@ export class Sky {
       this.atmo.mieCoefficient.value = 0.004;
       this.atmo.mieDirectionalG.value = 0.85;
       scene.add(this.dome);
+    }
+
+    // painted cumulus deck over the sky dome — the shapes that make a sky read
+    // as weather rather than a gradient. Skipped on the cheap path (software
+    // rasterizers can't afford a full-dome fbm).
+    this.clouds = null;
+    if (!cheap) {
+      const deck = makeCloudDome(1700);
+      this.clouds = deck;
+      scene.add(deck.mesh);
     }
 
     // bright disc the god-rays effect samples as its light source
@@ -198,6 +209,17 @@ export class Sky {
     // keep every painterly surface lit by the same sun/sky as the scene, so
     // rim light and leaf translucency track the day cycle
     updatePainterlyLighting(lightDir, mix3('sun'), mix3('hemiSky'));
+    if (this.clouds) {
+      const u = this.clouds.uniforms;
+      u.uTime.value += dt;
+      u.uSunDir.value.copy(lightDir);
+      u.uSunColor.value.copy(mix3('sun'));
+      u.uSkyColor.value.copy(mix3('horizon'));
+      // clouds go warm at golden hour and deep blue at night, like the sky
+      u.uCloudColor.value.copy(mix3('sun')).lerp(new THREE.Color(0xffffff), 0.55);
+      u.uShadowColor.value.copy(mix3('fog')).multiplyScalar(0.82);
+      this.clouds.mesh.position.copy(playerPos);
+    }
     this.hemi.color.copy(mix3('hemiSky'));
     this.hemi.groundColor.copy(mix3('hemiGround'));
     this.hemi.intensity = lerp(0.5, 0.8, dayF);
