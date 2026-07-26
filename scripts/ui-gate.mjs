@@ -133,11 +133,15 @@ try {
   }
 
   // E. iconography present
-  const icons = await page.evaluate(() => ({
-    titleOrnament: !!document.querySelector('#title-screen .ornament'),
-    hudSvg: document.querySelectorAll('#hud svg').length,
-  }));
-  if (!icons.titleOrnament) fail('E', 'title screen has no ornament/crest element');
+  // The crest must be actual drawn artwork, not just a marker element: require
+  // an <svg> with real path geometry inside it.
+  const icons = await page.evaluate(() => {
+    const host = document.querySelector('#title-screen .title-crest, #title-screen .ornament');
+    const paths = host ? host.querySelectorAll('svg path').length : 0;
+    return { host: !!host, paths, hudSvg: document.querySelectorAll('#hud svg').length };
+  });
+  if (!icons.host) fail('E', 'title screen has no crest/ornament element');
+  else if (icons.paths < 4) fail('E', `title crest has only ${icons.paths} drawn path(s) — it should be authored artwork, not a glyph`);
   if (icons.hudSvg < 1) fail('E', 'HUD has no inline SVG iconography');
 
   // F. contrast on solid surfaces

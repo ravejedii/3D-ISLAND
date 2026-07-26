@@ -1,14 +1,16 @@
 // DOM overlay: HUD, compass, toasts, and the title / pause / win screens.
 
+import { crestEmblem, plateCorners, ornamentRule, crystalPip } from './frames.js';
+
 export class HUD {
   constructor(root) {
     this.root = root;
-    const gemSvg = `<svg viewBox="0 0 24 24" width="18" height="18" aria-hidden="true"><defs><linearGradient id="gemg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#a5f3ff"/><stop offset="0.6" stop-color="#4f9cff"/><stop offset="1" stop-color="#2b6fd4"/></linearGradient></defs><path fill="url(#gemg)" d="M12 2 20 9.2 12 22 4 9.2Z"/><path fill="rgba(255,255,255,0.5)" d="M12 2 20 9.2H4Z" opacity="0.5"/></svg>`;
-    // gold crest gem: the sky-crystal motif re-tinted, used as the title emblem
-    const crestSvg = `<svg viewBox="0 0 24 24" width="20" height="20" aria-hidden="true"><defs><linearGradient id="crestg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#fdf6d8"/><stop offset="0.55" stop-color="#e8c96a"/><stop offset="1" stop-color="#b9903c"/></linearGradient></defs><path fill="url(#crestg)" d="M12 2 20 9.2 12 22 4 9.2Z"/><path fill="rgba(255,255,255,0.55)" d="M12 2 20 9.2H4Z" opacity="0.5"/></svg>`;
-    const flourishes = ['tl', 'tr', 'bl', 'br'].map((c) => `<i class="flourish flourish-${c}" aria-hidden="true"><i></i></i>`).join('');
+    const gemSvg = crystalPip(18);
     const keys = (list) => list.map(([k, v]) => `<span class="keyhint"><kbd>${k}</kbd>${v}</span>`).join('');
     const controlChips = keys([['WASD', 'move'], ['Shift', 'run'], ['Space', 'jump'], ['Mouse', 'look'], ['Scroll', 'zoom'], ['M', 'mute']]);
+    // The FPS readout is developer chrome, not part of the game's interface —
+    // it ships hidden and is opted into with ?fps or ?debug.
+    const showFps = /[?&](fps|debug)\b/.test(location.search);
 
     root.innerHTML = `
       <div class="vignette"></div>
@@ -16,32 +18,31 @@ export class HUD {
 
       <div class="hud hidden" id="hud">
         <div class="card crystal-counter">
-          <div class="counter-row">${gemSvg}<span id="crystal-count">0 / 10</span><span class="counter-label">crystals</span></div>
+          ${plateCorners()}
+          <div class="counter-row">${gemSvg}<span id="crystal-count">0 / 10</span></div>
           <div class="progress"><div class="progress-fill" id="crystal-progress"></div></div>
         </div>
         <div class="card compass"><div class="compass-strip" id="compass-strip"></div><i class="compass-needle"></i></div>
-        <div class="card fps" id="fps">-- FPS</div>
-        <div class="hints">${controlChips}</div>
+        ${showFps ? '<div class="card fps" id="fps">-- FPS</div>' : ''}
+        <div class="hints" id="hints">${controlChips}</div>
         <div class="toast" id="toast"><span class="toast-gem">${gemSvg}</span><span id="toast-text"></span></div>
       </div>
 
       <div class="screen" id="title-screen">
         <div class="title-stack">
-          ${flourishes}
-          <p class="eyebrow">A&nbsp;SKY-KINGDOM&nbsp;ADVENTURE</p>
-          <div class="ornament" aria-hidden="true"><i></i><span class="crest">${crestSvg}</span><i></i></div>
-          <h1>FLOATING ISLES</h1>
-          <p class="subtitle">A scattered kingdom drifts in the endless sky.<br/>Recover the <b>10 lost sky crystals</b> hidden across the islands.</p>
+          ${plateCorners()}
+          <div class="title-crest">${crestEmblem(124)}</div>
+          <p class="eyebrow">A Sky-Kingdom Adventure</p>
+          <h1>Floating Isles</h1>
+          <div class="title-rule">${ornamentRule(300)}</div>
+          <p class="subtitle">Ten sky crystals lie scattered across the drifting isles.</p>
           <button class="btn btn-primary" id="btn-play">Begin the Journey</button>
-          <p class="controls-list">${controlChips}</p>
-        </div>
-        <div class="screen-footer">
-          <span>v1.1</span><span class="dot">·</span><span>Three.js</span><span class="dot">·</span><span>models by KayKit</span>
         </div>
       </div>
 
       <div class="screen hidden" id="pause-screen">
         <div class="panel">
+          ${plateCorners()}
           <h2>Paused</h2>
           <button class="btn btn-primary" id="btn-resume">Resume</button>
           <div class="panel-divider"></div>
@@ -52,7 +53,8 @@ export class HUD {
       <div class="screen hidden" id="win-screen">
         <div class="win-rays" aria-hidden="true"></div>
         <div class="panel panel-win">
-          <div class="ornament" aria-hidden="true"><i></i><span>✦</span><i></i></div>
+          ${plateCorners()}
+          <div class="title-crest">${crestEmblem(96)}</div>
           <h2>The Sky Shines Again</h2>
           <p class="subtitle">You recovered every lost crystal. The isles are safe.</p>
           <p class="win-stats" id="win-stats"></p>
@@ -107,6 +109,7 @@ export class HUD {
   }
 
   setFPS(fps) {
+    if (!this.fpsEl) return; // readout only exists under ?fps / ?debug
     this.fpsEl.textContent = `${Math.round(fps)} FPS`;
     this.fpsEl.style.color = fps >= 50 ? '#9fd8a8' : fps >= 30 ? '#ffd98a' : '#ff9a8a';
   }

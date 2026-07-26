@@ -121,6 +121,28 @@ html, body {
   box-shadow: var(--shadow);
 }
 
+/* ---------- cut plates ----------
+   The interface surfaces are chamfered plates, not rounded rectangles: the
+   silhouette is cut with clip-path so it scales freely, while the drawn corner
+   filigree (frames.js) is fixed-size and pinned to the corners so it never
+   stretches. --cut sets the chamfer depth. */
+.crystal-counter, .panel, .title-stack, .btn-primary {
+  --cut: 14px;
+  position: relative;
+  border-radius: 0;
+  clip-path: polygon(
+    var(--cut) 0, calc(100% - var(--cut)) 0, 100% var(--cut),
+    100% calc(100% - var(--cut)), calc(100% - var(--cut)) 100%,
+    var(--cut) 100%, 0 calc(100% - var(--cut)), 0 var(--cut)
+  );
+}
+.plate-corners { position: absolute; inset: 0; pointer-events: none; }
+.plate-corners svg { position: absolute; }
+.plate-corners svg:nth-child(1) { top: 0; left: 0; }
+.plate-corners svg:nth-child(2) { top: 0; right: 0; transform: scaleX(-1); }
+.plate-corners svg:nth-child(3) { bottom: 0; left: 0; transform: scaleY(-1); }
+.plate-corners svg:nth-child(4) { bottom: 0; right: 0; transform: scale(-1, -1); }
+
 /* ---------- reusable frame primitive ----------
    A gilded hairline (real gradient border via mask, not a flat stroke) plus an
    engraved inner edge (light-above/dark-below hairline, like bevelled metal).
@@ -232,6 +254,9 @@ html, body {
   filter: drop-shadow(0 0 4px rgba(232, 201, 106, 0.7));
 }
 
+/* the legend introduces the controls, then gets out of the way */
+@keyframes hints-retire { to { opacity: 0; transform: translate(-50%, 10px); } }
+.hints { animation: hints-retire 1.2s ease 9s forwards; }
 .hints {
   position: absolute;
   bottom: 18px;
@@ -447,11 +472,15 @@ kbd {
 .btn:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .btn:active { transform: translateY(1px) scale(0.98); }
 .btn-primary {
-  color: #081320;
-  background: linear-gradient(135deg, #8ee7ff, #56a8ff);
-  box-shadow: 0 0 26px rgba(110, 200, 255, 0.4), 0 6px 18px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.55);
+  --cut: 10px;
+  color: #241802;
+  font-family: var(--font-display);
+  font-weight: 700;
+  background: linear-gradient(178deg, #fff6d5 0%, #f0d891 18%, #d9b459 52%, #a87f2e 82%, #f3e3ad 100%);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.75), inset 0 -2px 4px rgba(90, 60, 10, 0.4);
+  text-shadow: 0 1px 0 rgba(255, 248, 214, 0.6);
 }
-.btn-primary:hover { transform: translateY(-2px); box-shadow: 0 0 40px rgba(110, 200, 255, 0.65), 0 10px 24px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.55); }
+.btn-primary:hover { transform: translateY(-2px); filter: brightness(1.07); box-shadow: 0 10px 26px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.8), inset 0 -2px 4px rgba(90, 60, 10, 0.4); }
 
 /* ---------- misc overlays ---------- */
 .vignette {
@@ -555,4 +584,36 @@ kbd {
   .btn { padding: 13px 34px; font-size: 15px; }
   .panel { padding: 30px 26px 26px; margin: 0 16px; }
   .screen-footer { font-size: 10px; }
+}
+
+/* ---------- title lockup ----------
+   Crest, kicker, wordmark, rule. The wordmark is treated as struck metal:
+   a gold gradient fill, a bright top bevel and a dark seated edge, so it reads
+   as an object rather than as text with a gradient on it. */
+.title-crest { display: block; margin: 0 auto 2px; filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.55)); }
+.title-crest svg { display: block; margin: 0 auto; }
+.title-rule { display: block; margin: 6px auto 14px; opacity: 0.9; }
+.title-rule svg { display: block; }
+#title-screen .eyebrow {
+  font-family: var(--font-display);
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 6px;
+  text-transform: uppercase;
+  color: var(--gold-2);
+  opacity: 0.92;
+  margin-bottom: 2px;
+}
+#title-screen h1 {
+  font-family: var(--font-display);
+  font-weight: 900;
+  font-size: clamp(38px, 7.4vw, 84px);
+  letter-spacing: 3px;
+  line-height: 1.02;
+  background: linear-gradient(180deg, #fffdf2 0%, #ffeeb4 26%, #e3bd63 52%, #a9812f 74%, #f6e6b0 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  filter: drop-shadow(0 2px 0 rgba(120, 84, 20, 0.55)) drop-shadow(0 5px 16px rgba(0, 0, 0, 0.6));
+  padding-bottom: 4px;
 }

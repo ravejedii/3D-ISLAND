@@ -22,7 +22,9 @@ async function startSettled(page) {
 
 test('loads with a title screen and no console errors', async ({ page }) => {
   const errors = await boot(page);
-  await expect(page.locator('#title-screen h1')).toHaveText('FLOATING ISLES');
+  // casing is a type decision (Cinzel renders lowercase as small caps), so the
+  // assertion is on the wordmark itself, not on how it is capitalised
+  await expect(page.locator('#title-screen h1')).toHaveText(/floating isles/i);
   await page.waitForTimeout(2000);
   expect(errors).toEqual([]);
   expect(await page.evaluate(() => window.__game.state)).toBe('title');
