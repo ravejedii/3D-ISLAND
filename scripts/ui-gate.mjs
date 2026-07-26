@@ -17,6 +17,11 @@
 //   D. nothing overflows horizontally at 320/390/768/1280
 //   E. the interface uses real iconography, not only text
 //   F. text on solid surfaces clears 4.5:1 contrast (WCAG AA)
+//   G. HUD badges and menu surfaces have a SHAPED silhouette (clip-path,
+//      border-image or an SVG frame) — a gold hairline around a rectangle is
+//      still a rectangle
+//   I. the debug FPS readout is not part of the shipped HUD
+//   J. the control legend does not sit on screen forever during play
 //
 // Exit 0 = the floor is met. It does NOT mean the UI is beautiful.
 
@@ -167,7 +172,53 @@ try {
   });
   for (const c of contrast.slice(0, 6)) fail('F', `contrast ${c.ratio}:1 (<4.5) on "${c.text}" (${c.cls})`);
 
+  // G. shaped silhouette — a hairline around a rectangle is still a rectangle.
+  // Accepts a real cut shape, an image frame, or a dedicated SVG frame child.
+  const shaped = await page.evaluate(() => {
+    const sel = ['.card.crystal-counter', '.panel', '.btn-primary'];
+    return sel.map((s) => {
+      const el = document.querySelector(s);
+      if (!el) return { sel: s, missing: true };
+      const st = getComputedStyle(el);
+      let how = null;
+      if (st.clipPath && st.clipPath !== 'none') how = 'clip-path';
+      else if (st.borderImageSource && st.borderImageSource !== 'none') how = 'border-image';
+      else if (el.querySelector('svg.frame, svg[data-frame]')) how = 'svg frame';
+      return { sel: s, how };
+    });
+  });
+  for (const s of shaped) {
+    if (s.missing) { fail('G', `surface ${s.sel} not found`); continue; }
+    if (!s.how) fail('G', `${s.sel} is still a plain rectangle — needs a shaped silhouette (clip-path, border-image or an <svg class="frame">), not just a hairline border`);
+    else notes.push(`    ${s.sel} shape: ${s.how}`);
+  }
+
+  // I. debug readout must not ship in the default HUD
+  const fpsVisible = await page.evaluate(() => {
+    const el = document.querySelector('#fps');
+    if (!el) return false;
+    const s = getComputedStyle(el);
+    return s.display !== 'none' && s.visibility !== 'hidden' && parseFloat(s.opacity) > 0.05;
+  });
+  if (fpsVisible) fail('I', '#fps debug readout is visible in the default HUD — gate it behind ?fps / ?debug');
+
+  // J. the control legend must not sit on screen for the whole session
+  await page.evaluate(() => window.__game.start());
+  await page.waitForFunction(() => window.__game.state === 'playing', { timeout: 30000 });
+  await page.waitForTimeout(16000);
+  const hintsStillUp = await page.evaluate(() => {
+    const el = document.querySelector('.hints');
+    if (!el) return false;
+    const s = getComputedStyle(el);
+    return s.display !== 'none' && s.visibility !== 'hidden' && parseFloat(s.opacity) > 0.05;
+  });
+  if (hintsStillUp) fail('J', 'the control legend is still at full opacity 16s into play — it should introduce the controls then get out of the way');
+
   // ---------- mobile: touch targets ----------
+  // (A keyboard-affordance-on-touch check was drafted here and removed: the
+  // CSS already hides the WASD chips on touch, so it had nothing to catch, and
+  // its visibility walk could not be shown to fire reliably. An unverifiable
+  // check is worse than no check.)
   await boot(page, { width: 390, height: 844, touch: true });
   await page.evaluate(() => window.__game.start());
   await page.waitForFunction(() => window.__game.state === 'playing', { timeout: 30000 });
