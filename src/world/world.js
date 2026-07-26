@@ -2,7 +2,8 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { Island } from './islands.js';
 import { Bridge } from './bridges.js';
-import { buildCastle, buildCourtyard } from './castle.js';
+import { buildCastle, buildCourtyard, buildGateTorches } from './castle.js';
+import { buildModularCastle, updateBanners } from './castle_modular.js';
 import { placeModel } from '../core/assets.js';
 import CustomShaderMaterial from 'three-custom-shader-material/vanilla';
 import { sharedToonRamp, painterlyGlobals } from '../render/painterly.js';
@@ -86,7 +87,10 @@ export class World {
     const terrainMat = new CustomShaderMaterial({
       baseMaterial: THREE.MeshToonMaterial,
       vertexColors: true,
-      flatShading: true,
+      // smooth normals: flat shading is what turned the landscape into a field
+      // of visible green triangles. Landforms now read as sculpted surfaces and
+      // the painted detail comes from the shader instead of the topology.
+      flatShading: false,
       gradientMap: sharedToonRamp(),
       silent: true,
       uniforms: {
@@ -133,6 +137,12 @@ export class World {
           // not a brightness multiply, so fields stay clean instead of muddy
           float macro = smoothstep(0.3, 0.8, vnoise(vWPos.xz * 0.028));
           base = mix(base, base * vec3(1.1, 1.04, 0.82), macro * 0.3);
+          // Fine surface detail. With flat shading gone the topology no longer
+          // supplies any texture, so the ground gets its structure here: two
+          // octaves of grain plus a mid-scale patchiness that reads as worn
+          // turf rather than a solid green fill.
+          float grain = vnoise(vWPos.xz * 1.35) * 0.6 + vnoise(vWPos.xz * 4.1) * 0.4;
+          base *= 0.92 + grain * 0.16;
           // steep faces become rock
           float slope = 1.0 - clamp(vWNormal.y, 0.0, 1.0);
           float rockMix = smoothstep(0.42, 0.62, slope);
@@ -196,18 +206,18 @@ export class World {
     this.torchFlames = [];
     // The model keep sits at the back of a walled bailey you can actually
     // walk into through the south gate.
-    const placedCastle = placeModel(models.castle, {
-      x: castlePos.x, z: castlePos.z - 6.5, y: 6.45, scale: 4.2, rotY: 0, colliderShrink: 0.6,
-    });
-    if (placedCastle) {
-      scene.add(placedCastle.model);
-      this.colliders.push(...placedCastle.colliders);
-      // cool gray stone to match the keep model
-      const courtyard = buildCourtyard({ x: castlePos.x, z: castlePos.z, groundY: 6.45, stone: 0x99a0aa, stoneDark: 0x7e8590, roof: 0x3f6f92 });
-      scene.add(courtyard.group);
-      this.colliders.push(...courtyard.colliders);
-      this.torchLight = courtyard.torchLight;
-      this.torchFlames = courtyard.flames;
+    // Authored modular architecture first; the old primitive keep only appears
+    // if the kit fails to load.
+    const modular = buildModularCastle(models, { x: castlePos.x, z: castlePos.z, groundY: 6.45 });
+    this.banners = [];
+    if (modular) {
+      scene.add(modular.group);
+      this.colliders.push(...modular.colliders);
+      this.banners = modular.banners;
+      const torches = buildGateTorches({ x: castlePos.x, y: 6.45, z: modular.gateZ - 1.4, spread: 4.2 });
+      scene.add(torches.group);
+      this.torchLight = torches.light;
+      this.torchFlames = torches.flames;
     } else {
       const castle = buildCastle({ x: castlePos.x, z: castlePos.z, groundY: 6.5 });
       scene.add(castle.group);
@@ -295,9 +305,10 @@ export class World {
     const rng = new RNG(SEED + 500);
     // polar (island, angle, radiusFrac); one is inside the keep
     // First crystal waits inside the castle courtyard, past the gate.
-    const keepSpot = this.models.castle
-      ? { isl: this.main, x: 5.5, z: -10 }
-      : { isl: this.main, x: this.castleCenter.x, z: this.castleCenter.z - 18 * 0.35 };
+    // Inside the bailey, past the gate: clear of the keep (which sits at the
+    // north end) and of the well, so it stays collectable once the modular
+    // castle's colliders are in place.
+    const keepSpot = { isl: this.main, x: -5.5, z: -12 };
     const spots = [
       keepSpot,
       { isl: this.main, a: 0.6, f: 0.62 },
@@ -356,6 +367,7 @@ export class World {
   }
 
   update(dt, elapsed, playerPos) {
+    if (this.banners && this.banners.length) updateBanners(this.banners, elapsed);
     this.sky.update(dt, playerPos);
     for (const u of this.updatables) u(dt, elapsed);
     const nightF = this.sky.nightFactor;

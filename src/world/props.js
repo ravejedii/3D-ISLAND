@@ -58,9 +58,36 @@ function flowerGeometry() {
 }
 
 // Try to find `count` spots on the island where `ok(x, z)` passes.
-function scatter(island, rng, count, ok, maxSlope = 0.45, rimMax = 0.82) {
+// `clusterRadius` groups the spots into stands with open ground between them —
+// vegetation in nature gathers, and even scatter is what reads as programmer
+// art. Pass 0 for an even distribution (rocks, trees).
+function scatter(island, rng, count, ok, maxSlope = 0.45, rimMax = 0.82, clusterRadius = 0) {
   const spots = [];
   let attempts = 0;
+  if (clusterRadius > 0) {
+    const perCluster = 7;
+    const clusters = Math.max(1, Math.round(count / perCluster));
+    let made = 0;
+    while (made < clusters && attempts < clusters * 60) {
+      attempts++;
+      const a = rng.range(0, Math.PI * 2);
+      const r = Math.sqrt(rng.next()) * island.radius * rimMax;
+      const cx = island.center.x + Math.cos(a) * r;
+      const cz = island.center.z + Math.sin(a) * r;
+      if (island.slopeAt(cx, cz) > maxSlope || !ok(cx, cz)) continue;
+      made++;
+      const n = Math.round(perCluster * rng.range(0.5, 1.5));
+      for (let i = 0; i < n && spots.length < count; i++) {
+        const t = rng.next() * rng.next(); // packs toward the centre
+        const ang = rng.range(0, Math.PI * 2);
+        const x = cx + Math.cos(ang) * t * clusterRadius;
+        const z = cz + Math.sin(ang) * t * clusterRadius;
+        if (island.slopeAt(x, z) > maxSlope || !ok(x, z)) continue;
+        spots.push({ x, z, y: island.heightAt(x, z) });
+      }
+    }
+    return spots;
+  }
   while (spots.length < count && attempts < count * 40) {
     attempts++;
     const a = rng.range(0, Math.PI * 2);
@@ -88,11 +115,16 @@ export function buildProps(islands, { seed = 909, exclude, models = {} }) {
   const bakeC = (gltf, o = {}) => bakeColored(gltf, mergeGeometries, { roughness: 0.9, ...o });
   const bakeLeaf = (gltf) => bakeC(gltf, { foliage: 0.55, mottle: 0.2, mottleScale: 0.5 });
   const bakeStone = (gltf) => bakeC(gltf, { foliage: 0, mottle: 0.26, rim: 0.62, mottleScale: 0.9 });
-  const commonTrees = [models.treeCommonA, models.treeCommonB, models.treeCommonC].map(bakeLeaf).filter(Boolean);
-  const pineTrees = [models.treePineA, models.treePineB].map(bakeLeaf).filter(Boolean);
+  const commonTrees = [models.treeCommonA, models.treeCommonB].map(bakeLeaf).filter(Boolean);
+  const pineTrees = [models.treePineA].map(bakeLeaf).filter(Boolean);
   const willows = [models.treeWillow].map(bakeLeaf).filter(Boolean);
-  const rockVariants = [models.rockA, models.rockB, models.rockC, models.rockMossA, models.rockMossB].map(bakeStone).filter(Boolean);
-  const bushVariants = [models.bushA, models.bushB, models.bushBerries].map(bakeLeaf).filter(Boolean);
+  const rockVariants = [models.rockA, models.rockB, models.rockMossA].map(bakeStone).filter(Boolean);
+  const bushVariants = [models.bushA, models.bushB].map(bakeLeaf).filter(Boolean);
+  // authored grass/flower/broadleaf clumps (Quaternius) — real modelled tufts
+  // that sit among the shader blades so the meadow has actual plant shapes
+  const grassClumps = [models.grassClumpA, models.grassClumpB].map(bakeLeaf).filter(Boolean);
+  const flowerClumps = [models.flowerClump].map(bakeLeaf).filter(Boolean);
+  const plantClumps = [models.plantA, models.plantB].map(bakeLeaf).filter(Boolean);
 
   const defs = [];
   // subtle per-instance shade drift (multiplicative, so it varies toward
@@ -120,11 +152,11 @@ export function buildProps(islands, { seed = 909, exclude, models = {} }) {
   }
   if (bushVariants.length) {
     for (const v of bushVariants) {
-      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round((isl.radius * 0.26) / bushVariants.length), scale: [0.7, 1.35], tint: leafTint, lean: 0.07, collideR: 0, maxSlope: 0.5, shadow: true, sway: 0.09 });
+      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round((isl.radius * 0.26) / bushVariants.length), scale: [0.7, 1.35], tint: leafTint, lean: 0.07, collideR: 0, maxSlope: 0.5, shadow: false, sway: 0.09 });
     }
   } else {
     for (const geo of [bushGeometry(1), bushGeometry(2)]) {
-      defs.push({ geo, per: (isl) => Math.round(isl.radius * 0.15), scale: [0.8, 1.5], tint: leafTint, lean: 0.08, collideR: 0, maxSlope: 0.5, shadow: true, sway: 0.09 });
+      defs.push({ geo, per: (isl) => Math.round(isl.radius * 0.15), scale: [0.8, 1.5], tint: leafTint, lean: 0.08, collideR: 0, maxSlope: 0.5, shadow: false, sway: 0.09 });
     }
   }
   if (rockVariants.length) {
@@ -134,9 +166,26 @@ export function buildProps(islands, { seed = 909, exclude, models = {} }) {
   } else {
     defs.push({ geo: rockGeometry(), per: (isl) => Math.round(isl.radius * 0.22), scale: [0.4, 1.5], tint: [0xb9b6ae, 0x74716b], collideR: 1.0, maxSlope: 0.6, shadow: true });
   }
-  // grass + flowers stay procedural — they read great and sway in the wind
-  defs.push({ geo: grassGeometry(), per: (isl) => Math.round(isl.radius * 1.6), scale: [0.7, 1.5], tint: [0xd0ff9e, 0x7fbf62], collideR: 0, maxSlope: 0.5, shadow: false, sway: 0.35 });
-  defs.push({ geo: flowerGeometry(), per: (isl) => Math.round(isl.radius * 0.4), scale: [0.8, 1.3], tint: [0xff8ab5, 0x9e6bff, 0xffd166, 0xff6b6b], collideR: 0, maxSlope: 0.45, shadow: false, palette: true, sway: 0.25 });
+  // Authored plant clumps replace the procedural spike tufts. They are placed
+  // in clusters (see `cluster` below) so vegetation gathers into stands with
+  // clear ground between, instead of an even sprinkle.
+  if (grassClumps.length) {
+    for (const v of grassClumps) {
+      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round((isl.radius * 0.55) / grassClumps.length), scale: [0.9, 1.9], tint: [0xd6f2a8, 0x86c060], collideR: 0, maxSlope: 0.42, shadow: false, sway: 0.2, cluster: 5.5 });
+    }
+  } else {
+    defs.push({ geo: grassGeometry(), per: (isl) => Math.round(isl.radius * 1.6), scale: [0.7, 1.5], tint: [0xd0ff9e, 0x7fbf62], collideR: 0, maxSlope: 0.5, shadow: false, sway: 0.35 });
+  }
+  for (const v of plantClumps) {
+    defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round((isl.radius * 0.16) / plantClumps.length), scale: [0.8, 1.6], tint: [0xffffff, 0xbcd89a], collideR: 0, maxSlope: 0.4, shadow: false, sway: 0.14, cluster: 4.0 });
+  }
+  if (flowerClumps.length) {
+    for (const v of flowerClumps) {
+      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round(isl.radius * 0.22), scale: [0.8, 1.5], tint: [0xffffff, 0xffe6b0], collideR: 0, maxSlope: 0.38, shadow: false, sway: 0.22, cluster: 3.0 });
+    }
+  } else {
+    defs.push({ geo: flowerGeometry(), per: (isl) => Math.round(isl.radius * 0.4), scale: [0.8, 1.3], tint: [0xff8ab5, 0x9e6bff, 0xffd166, 0xff6b6b], collideR: 0, maxSlope: 0.45, shadow: false, palette: true, sway: 0.25 });
+  }
 
   const dummy = new THREE.Object3D();
   const tintColor = new THREE.Color();
@@ -146,7 +195,7 @@ export function buildProps(islands, { seed = 909, exclude, models = {} }) {
   for (const def of defs) {
     const placements = [];
     for (const isl of islands) {
-      const spots = scatter(isl, rng, def.per(isl), exclude, def.maxSlope);
+      const spots = scatter(isl, rng, def.per(isl), exclude, def.maxSlope, 0.82, def.cluster || 0);
       placements.push(...spots);
     }
     if (!placements.length) continue;

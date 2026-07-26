@@ -5,7 +5,7 @@ import { RNG } from '../core/rng.js';
 // blades sway in the wind and smoothly shrink away past ~55m so distance
 // costs nothing. Gated to hardware GL at the higher quality levels.
 export class GrassField {
-  constructor(scene, island, exclude, { count = 26000, seed = 727 } = {}) {
+  constructor(scene, island, exclude, { count = 34000, seed = 727 } = {}) {
     const rng = new RNG(seed);
 
     // --- one blade: tapered 3-segment strip ---
@@ -22,21 +22,55 @@ export class GrassField {
     ]);
     blade.setAttribute('position', new THREE.BufferAttribute(positions, 3));
 
-    // --- scatter ---
+    // --- scatter in CLUMPS, not a uniform sprinkle ---
+    // A meadow is not evenly distributed grass: it is tufts of varying size
+    // with bare ground between them. Uniform scatter is what made the old field
+    // read as a bed of identical spikes, so blades are grown around cluster
+    // centres instead, each clump carrying its own radius, density and height
+    // bias. The gaps between clumps are as important as the clumps.
     const offsets = [];
     const data = []; // rot, scale, tint, phase
-    let attempts = 0;
-    while (offsets.length / 3 < count && attempts < count * 30) {
-      attempts++;
+    const clumps = [];
+    const targetClumps = Math.round(count / 26);
+    let tries = 0;
+    while (clumps.length < targetClumps && tries < targetClumps * 40) {
+      tries++;
       const a = rng.range(0, Math.PI * 2);
       const r = Math.sqrt(rng.next()) * island.radius * 0.86;
-      const x = island.center.x + Math.cos(a) * r;
-      const z = island.center.z + Math.sin(a) * r;
-      if (!exclude(x, z)) continue;
-      if (island.slopeAt(x, z) > 0.38) continue;
-      const y = island.heightAt(x, z);
-      offsets.push(x, y - 0.02, z);
-      data.push(rng.range(0, Math.PI * 2), rng.range(0.5, 1.25), rng.next(), rng.range(0, Math.PI * 2));
+      const cx = island.center.x + Math.cos(a) * r;
+      const cz = island.center.z + Math.sin(a) * r;
+      if (!exclude(cx, cz)) continue;
+      if (island.slopeAt(cx, cz) > 0.34) continue;
+      // three clump archetypes: broad low mats, medium tufts, tall sparse stands
+      const kind = rng.next();
+      const spread = kind < 0.4 ? rng.range(1.5, 2.8) : kind < 0.8 ? rng.range(0.7, 1.5) : rng.range(2.4, 4.0);
+      const blades = kind < 0.4 ? rng.range(40, 70) : kind < 0.8 ? rng.range(22, 42) : rng.range(18, 34);
+      const heightBias = kind < 0.4 ? 0.72 : kind < 0.8 ? 1.0 : 1.35;
+      clumps.push({ cx, cz, spread, blades: Math.round(blades), heightBias });
+    }
+
+    for (const c of clumps) {
+      for (let i = 0; i < c.blades && offsets.length / 3 < count; i++) {
+        // gaussian-ish falloff packs blades toward the clump centre and lets
+        // the edge fray out instead of ending on a hard circle
+        const t = rng.next() * rng.next();
+        const ang = rng.range(0, Math.PI * 2);
+        const rr = t * c.spread;
+        const x = c.cx + Math.cos(ang) * rr;
+        const z = c.cz + Math.sin(ang) * rr;
+        if (!exclude(x, z)) continue;
+        if (island.slopeAt(x, z) > 0.4) continue;
+        const y = island.heightAt(x, z);
+        // blades shorten toward the clump edge, so each tuft has a domed profile
+        const edge = 1 - (rr / c.spread) * 0.45;
+        offsets.push(x, y - 0.02, z);
+        data.push(
+          rng.range(0, Math.PI * 2),
+          rng.range(0.55, 1.2) * c.heightBias * edge,
+          rng.next(),
+          rng.range(0, Math.PI * 2),
+        );
+      }
     }
     const n = offsets.length / 3;
 

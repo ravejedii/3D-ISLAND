@@ -13,8 +13,8 @@ export class Island {
     noiseScale = 0.045,
     plateau = null, // { x, z, radius, height } in world coords, height relative to center.y
     pond = null, // { x, z, radius, depth } in world coords
-    rings = 22,
-    sectors = 64,
+    rings = 34,
+    sectors = 96,
     gridOrigin = null, // where the radial grid fans from (default: center) —
     // park it on flat ground, because sliver triangles at the fan turn any
     // height gradient into radial lighting spokes
