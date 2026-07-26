@@ -5,6 +5,7 @@ import { Bridge } from './bridges.js';
 import { buildCastle, buildCourtyard } from './castle.js';
 import { placeModel } from '../core/assets.js';
 import CustomShaderMaterial from 'three-custom-shader-material/vanilla';
+import { sharedToonRamp, painterlyGlobals } from '../render/painterly.js';
 import { buildProps } from './props.js';
 import { Sky } from './sky.js';
 import { buildPond, buildWaterfall } from './water.js';
@@ -83,12 +84,13 @@ export class World {
     // collision staying purely analytic
     const terrainGeo = mergeGeometries(this.islands.map((i) => i.buildGeometry()));
     const terrainMat = new CustomShaderMaterial({
-      baseMaterial: THREE.MeshStandardMaterial,
+      baseMaterial: THREE.MeshToonMaterial,
       vertexColors: true,
       flatShading: true,
-      roughness: 1,
+      gradientMap: sharedToonRamp(),
       silent: true,
       uniforms: {
+        ...painterlyGlobals,
         uCliff: { value: new THREE.Color(0x998772) },
         uPath: { value: new THREE.Color(0xc9a26a) },
         uPathSegs: { value: PATH_SEGMENTS.map(([a, b, c, d]) => new THREE.Vector4(a, b, c, d)) },

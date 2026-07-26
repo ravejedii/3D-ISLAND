@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { clamp } from '../core/rng.js';
+import { painterlyfy } from '../render/painterly.js';
 
 const GRAVITY = 30;
 const WALK_SPEED = 7;
@@ -65,6 +66,10 @@ export class Player {
       const s = 1.85 / height;
       model.scale.setScalar(s);
       model.position.y = -box.min.y * s;
+
+      // cloth and armour get the same painted treatment as the world, with a
+      // stronger rim so the hero separates from the meadow behind him
+      painterlyfy(model, { mottle: 0.12, rim: 0.8, mottleScale: 4.0 });
 
       this.mixer = new THREE.AnimationMixer(model);
       // Clip names differ per pack (KayKit: "Running_A"; Quaternius:

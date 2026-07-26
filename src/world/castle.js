@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { painterlyMaterial } from '../render/painterly.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 
 // Castle keep built from primitives, merged into a handful of draw calls.
@@ -144,7 +145,7 @@ export function buildCourtyard({ x, z, groundY, stone = STONE, stoneDark = STONE
 
   const merged = mergeGeometries(geos.map((g) => g.toNonIndexed()));
   merged.computeVertexNormals();
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95 });
+  const mat = painterlyMaterial({ vertexColors: true, flatShading: true, mottle: 0.3, rim: 0.6, mottleScale: 0.55 });
   const mesh = new THREE.Mesh(merged, mat);
   mesh.castShadow = true;
   mesh.receiveShadow = true;
@@ -198,7 +199,7 @@ export function buildCastle({ x, z, groundY }) {
 
   const merged = mergeGeometries(geos.map((g) => g.toNonIndexed()));
   merged.computeVertexNormals();
-  const mat = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.95 });
+  const mat = painterlyMaterial({ vertexColors: true, flatShading: true, mottle: 0.3, rim: 0.6, mottleScale: 0.55 });
   const mesh = new THREE.Mesh(merged, mat);
   mesh.castShadow = true;
   mesh.receiveShadow = true;

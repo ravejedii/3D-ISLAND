@@ -2,6 +2,7 @@ import * as THREE from 'three';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { RNG, hash2 } from '../core/rng.js';
 import { bakeColored } from '../core/assets.js';
+import { painterlyMaterial } from '../render/painterly.js';
 import { oakGeometry, birchGeometry, pineGeometry as pineTreeGeometry, bushGeometry } from './trees.js';
 
 // Instanced scenery: pine trees, rocks, grass tufts, flowers.
@@ -83,12 +84,15 @@ export function buildProps(islands, { seed = 909, exclude, models = {} }) {
   // their per-material flat colours are folded into a vertex-colour attribute
   // so a single InstancedMesh draws trunk + foliage. If nothing loaded (the
   // ?noassets path), fall back to the hand-built procedural trees/rocks.
-  const bakeC = (gltf) => bakeColored(gltf, mergeGeometries, { roughness: 0.9 });
-  const commonTrees = [models.treeCommonA, models.treeCommonB, models.treeCommonC].map(bakeC).filter(Boolean);
-  const pineTrees = [models.treePineA, models.treePineB].map(bakeC).filter(Boolean);
-  const willows = [models.treeWillow].map(bakeC).filter(Boolean);
-  const rockVariants = [models.rockA, models.rockB, models.rockC, models.rockMossA, models.rockMossB].map(bakeC).filter(Boolean);
-  const bushVariants = [models.bushA, models.bushB, models.bushBerries].map(bakeC).filter(Boolean);
+  // foliage lets sun bleed through leaves; rock/stone keeps it at zero
+  const bakeC = (gltf, o = {}) => bakeColored(gltf, mergeGeometries, { roughness: 0.9, ...o });
+  const bakeLeaf = (gltf) => bakeC(gltf, { foliage: 0.55, mottle: 0.2, mottleScale: 0.5 });
+  const bakeStone = (gltf) => bakeC(gltf, { foliage: 0, mottle: 0.26, rim: 0.62, mottleScale: 0.9 });
+  const commonTrees = [models.treeCommonA, models.treeCommonB, models.treeCommonC].map(bakeLeaf).filter(Boolean);
+  const pineTrees = [models.treePineA, models.treePineB].map(bakeLeaf).filter(Boolean);
+  const willows = [models.treeWillow].map(bakeLeaf).filter(Boolean);
+  const rockVariants = [models.rockA, models.rockB, models.rockC, models.rockMossA, models.rockMossB].map(bakeStone).filter(Boolean);
+  const bushVariants = [models.bushA, models.bushB, models.bushBerries].map(bakeLeaf).filter(Boolean);
 
   const defs = [];
   // subtle per-instance shade drift (multiplicative, so it varies toward
@@ -148,7 +152,7 @@ export function buildProps(islands, { seed = 909, exclude, models = {} }) {
     if (!placements.length) continue;
     const mat = def.material
       ? def.material.clone()
-      : new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 0.9 });
+      : painterlyMaterial({ vertexColors: true, flatShading: true, foliage: 0.45, mottle: 0.18, mottleScale: 0.6 });
     if (def.sway) {
       // wind: vertices lean by height, phase varies per instance position
       const sway = def.sway;

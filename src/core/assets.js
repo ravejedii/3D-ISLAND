@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
+import { painterlyMaterial, painterlyfy } from '../render/painterly.js';
 
 // Central glTF/GLB asset manager: promise-cached loads, aggregate progress for
 // the loading screen, and per-asset error capture so a missing/corrupt file
@@ -84,7 +85,7 @@ export function bakeToGeometry(gltf, mergeGeometries) {
 // "Green" materials, flat colors, no textures) into ONE geometry whose colors
 // live in a vertex-color attribute — so a single InstancedMesh can draw it and
 // still show every material. Returns { geometry, material } or null.
-export function bakeColored(gltf, mergeGeometries, { roughness = 0.92 } = {}) {
+export function bakeColored(gltf, mergeGeometries, { roughness = 0.92, foliage = 0, mottle = 0.16, rim = 0.5, mottleScale = 0.35 } = {}) {
   if (!gltf) return null;
   const geos = [];
   gltf.scene.updateMatrixWorld(true);
@@ -109,7 +110,7 @@ export function bakeColored(gltf, mergeGeometries, { roughness = 0.92 } = {}) {
   if (!geos.length) return null;
   const merged = mergeGeometries(geos);
   merged.computeVertexNormals();
-  const material = new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness, metalness: 0 });
+  const material = painterlyMaterial({ vertexColors: true, flatShading: true, foliage, mottle, rim, mottleScale });
   return { geometry: merged, material };
 }
 
@@ -124,6 +125,8 @@ export function placeModel(gltf, { x, z, y = 0, scale = 1, rotY = 0, colliderShr
       o.receiveShadow = true;
     }
   });
+  // painted stone/timber rather than flat fills
+  painterlyfy(model, { mottle: 0.28, rim: 0.55, mottleScale: 0.7 });
   model.scale.setScalar(scale);
   model.rotation.y = rotY;
   model.position.set(x, y, z);

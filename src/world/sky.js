@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { updatePainterlyLighting } from '../render/painterly.js';
 import { Sky as AtmoSky } from 'three/addons/objects/Sky.js';
 import { RNG, clamp, lerp, smoothstep } from '../core/rng.js';
 
@@ -194,6 +195,9 @@ export class Sky {
     this.sun.intensity = isDay ? lerp(0.35, 1.9, dayF) : 0.9;
     this.sun.color.set(isDay ? mix3('sun') : new THREE.Color(0x8fa5e8));
 
+    // keep every painterly surface lit by the same sun/sky as the scene, so
+    // rim light and leaf translucency track the day cycle
+    updatePainterlyLighting(lightDir, mix3('sun'), mix3('hemiSky'));
     this.hemi.color.copy(mix3('hemiSky'));
     this.hemi.groundColor.copy(mix3('hemiGround'));
     this.hemi.intensity = lerp(0.5, 0.8, dayF);
