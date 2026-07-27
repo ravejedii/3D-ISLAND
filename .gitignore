@@ -6,3 +6,6 @@ playwright-report/
 
 # router-loop state
 .router/
+
+# Claude agent worktrees (transient subagent workspaces)
+.claude/
