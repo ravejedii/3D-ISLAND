@@ -53,7 +53,11 @@ function boxCollider(minX, maxX, minZ, maxZ, minY, maxY) {
 
 // models: { wall, wallTall, wallEntrance, towerLarge, towerPointy, tower,
 //           towerSmall, watchtower, banner, door, window, well }
-export function buildModularCastle(models, { x, z, groundY }) {
+export function buildModularCastle(models, { x, z, groundY, groundAt = null }) {
+  // Seat every piece on the terrain it actually stands on, sunk slightly so
+  // the base is buried — a wall whose corner hangs over a slope reads as a
+  // model dropped onto the map, not a building built on it.
+  const seat = (px, pz) => (groundAt ? Math.min(groundY, groundAt(px, pz)) : groundY) - 0.3;
   const missing = PIECES.filter((k) => !models[k]);
   if (missing.length > 4) return null; // not enough of the kit loaded
 
@@ -79,7 +83,7 @@ export function buildModularCastle(models, { x, z, groundY }) {
       if (side === 'E') { px = x + half; pz = z + t; rot = Math.PI / 2; }
 
       if (isGateSlot) {
-        const gate = place(models.wallEntrance || models.wall, { x: px, z: pz, y: y0, rotY: rot });
+        const gate = place(models.wallEntrance || models.wall, { x: px, z: pz, y: seat(px, pz), rotY: rot });
         if (gate) group.add(gate);
         // two half-width colliders leave the doorway walkable
         const jamb = WALL_W * 0.32;
@@ -91,7 +95,7 @@ export function buildModularCastle(models, { x, z, groundY }) {
       // alternate tall/short modules so the wall line isn't a flat extrusion
       const tall = (i + (side === 'N' ? 1 : 0)) % 2 === 0;
       const piece = tall ? (models.wallTall || models.wall) : models.wall;
-      const seg = place(piece, { x: px, z: pz, y: y0, rotY: rot });
+      const seg = place(piece, { x: px, z: pz, y: seat(px, pz), rotY: rot });
       if (seg) group.add(seg);
       const along = WALL_W / 2;
       if (side === 'N' || side === 'S') {
@@ -113,7 +117,7 @@ export function buildModularCastle(models, { x, z, groundY }) {
   for (const c of corners) {
     const px = x + c.dx * half;
     const pz = z + c.dz * half;
-    const t = place(c.piece, { x: px, z: pz, y: y0, scale: c.s });
+    const t = place(c.piece, { x: px, z: pz, y: seat(px, pz), scale: c.s });
     if (t) group.add(t);
     colliders.push({ type: 'circle', x: px, z: pz, r: 2.6, minY: y0 - 1, maxY: y0 + wallH * 1.6 });
   }
@@ -122,20 +126,20 @@ export function buildModularCastle(models, { x, z, groundY }) {
   for (const sx of [-1, 1]) {
     const px = x + sx * WALL_W * 0.9;
     const pz = z + half;
-    const t = place(models.towerSmall || models.tower, { x: px, z: pz, y: y0, scale: SCALE * 0.95 });
+    const t = place(models.towerSmall || models.tower, { x: px, z: pz, y: seat(px, pz), scale: SCALE * 0.95 });
     if (t) group.add(t);
     colliders.push({ type: 'circle', x: px, z: pz, r: 1.9, minY: y0 - 1, maxY: y0 + wallH });
   }
 
   // ---- keep: the tallest mass, set back on the north side ----
   const keepZ = z - half * 0.45;
-  const keep = place(models.towerPointy || models.towerLarge, { x, z: keepZ, y: y0, scale: SCALE * 1.7 });
+  const keep = place(models.towerPointy || models.towerLarge, { x, z: keepZ, y: seat(x, keepZ), scale: SCALE * 1.7 });
   if (keep) group.add(keep);
   colliders.push({ type: 'circle', x, z: keepZ, r: 4.2, minY: y0 - 1, maxY: y0 + wallH * 2.6 });
   // two shoulder towers give the keep a base instead of a lone spike
   for (const sx of [-1, 1]) {
     const px = x + sx * WALL_W * 1.15;
-    const t = place(models.towerLarge || models.tower, { x: px, z: keepZ + WALL_W * 0.35, y: y0, scale: SCALE * 1.05 });
+    const t = place(models.towerLarge || models.tower, { x: px, z: keepZ + WALL_W * 0.35, y: seat(px, keepZ + WALL_W * 0.35), scale: SCALE * 1.05 });
     if (t) group.add(t);
     colliders.push({ type: 'circle', x: px, z: keepZ + WALL_W * 0.35, r: 2.4, minY: y0 - 1, maxY: y0 + wallH * 1.8 });
   }
@@ -157,7 +161,7 @@ export function buildModularCastle(models, { x, z, groundY }) {
     }
   }
   if (models.well) {
-    const w = place(models.well, { x: x + WALL_W * 0.8, z: z + WALL_W * 0.5, y: y0, scale: SCALE * 0.9 });
+    const w = place(models.well, { x: x + WALL_W * 0.8, z: z + WALL_W * 0.5, y: seat(x + WALL_W * 0.8, z + WALL_W * 0.5), scale: SCALE * 0.9 });
     if (w) group.add(w);
     colliders.push({ type: 'circle', x: x + WALL_W * 0.8, z: z + WALL_W * 0.5, r: 1.3, minY: y0 - 1, maxY: y0 + 2 });
   }

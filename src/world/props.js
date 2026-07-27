@@ -113,7 +113,23 @@ export function buildProps(islands, { seed = 909, exclude, models = {} }) {
   // ?noassets path), fall back to the hand-built procedural trees/rocks.
   // foliage lets sun bleed through leaves; rock/stone keeps it at zero
   const bakeC = (gltf, o = {}) => bakeColored(gltf, mergeGeometries, { roughness: 0.9, ...o });
-  const bakeLeaf = (gltf) => bakeC(gltf, { foliage: 0.55, mottle: 0.2, mottleScale: 0.5 });
+  // Authored vegetation palette. The packs' source greens are nearly black in
+  // linear space and collapsed into silhouette blobs under the toon ramp, so
+  // every foliage/trunk colour is remapped through HSL into a designed range:
+  // foliage lifts into sage-to-spring greens with a warm sunny cast, trunks
+  // into readable warm bark instead of near-black.
+  const hsl = { h: 0, s: 0, l: 0 };
+  const leafRemap = (c, matName) => {
+    c.getHSL(hsl);
+    if (/wood|trunk|bark|brown/i.test(matName) || (hsl.h < 0.13 && hsl.s > 0.15)) {
+      return c.setHSL(0.07, 0.34, Math.max(0.30, Math.min(0.42, hsl.l + 0.22)));
+    }
+    // foliage: keep each variant's hue character but move it into a lively band
+    const hue = 0.21 + (hsl.h - 0.28) * 0.35;
+    const light = 0.34 + Math.min(0.18, hsl.l * 1.6);
+    return c.setHSL(Math.max(0.16, Math.min(0.27, hue)), 0.52, light);
+  };
+  const bakeLeaf = (gltf) => bakeC(gltf, { foliage: 0.55, mottle: 0.2, mottleScale: 0.5, remap: leafRemap });
   const bakeStone = (gltf) => bakeC(gltf, { foliage: 0, mottle: 0.26, rim: 0.62, mottleScale: 0.9 });
   const commonTrees = [models.treeCommonA, models.treeCommonB].map(bakeLeaf).filter(Boolean);
   const pineTrees = [models.treePineA].map(bakeLeaf).filter(Boolean);
@@ -133,13 +149,13 @@ export function buildProps(islands, { seed = 909, exclude, models = {} }) {
   const leafTint = [0xffffff, 0xd7e6bf];
   if (commonTrees.length) {
     for (const v of commonTrees) {
-      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round((isl.radius * 0.17) / commonTrees.length), scale: [1.4, 2.5], tint: leafTint, accent: 0xe7b168, accentChance: 0.07, lean: 0.05, collideR: 0.16, maxSlope: 0.4, shadow: true, sway: 0.045 });
+      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round((isl.radius * 0.17) / commonTrees.length), scale: [1.3, 2.0], tint: leafTint, accent: 0xe7b168, accentChance: 0.07, lean: 0.05, collideR: 0.16, maxSlope: 0.4, shadow: true, sway: 0.045 });
     }
     for (const v of pineTrees) {
-      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round((isl.radius * 0.09) / pineTrees.length), scale: [1.5, 2.7], tint: [0xffffff, 0xcfe0c2], lean: 0.03, collideR: 0.14, maxSlope: 0.44, shadow: true, sway: 0.035 });
+      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round((isl.radius * 0.09) / pineTrees.length), scale: [1.4, 2.2], tint: [0xffffff, 0xcfe0c2], lean: 0.03, collideR: 0.14, maxSlope: 0.44, shadow: true, sway: 0.035 });
     }
     for (const v of willows) {
-      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round(isl.radius * 0.03), scale: [1.6, 2.3], tint: leafTint, lean: 0.04, collideR: 0.16, maxSlope: 0.36, shadow: true, sway: 0.06 });
+      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round(isl.radius * 0.03), scale: [1.5, 2.0], tint: leafTint, lean: 0.04, collideR: 0.16, maxSlope: 0.36, shadow: true, sway: 0.06 });
     }
   } else {
     // procedural fallback (no assets)

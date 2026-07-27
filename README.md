@@ -2,12 +2,15 @@
 
 **▶ Play it now: <https://ravejedii.github.io/3D-ISLAND/>** — works on desktop and mobile.
 
-A 3D explorable world that runs in the browser. A scattered kingdom drifts in
-the endless sky — cross rope bridges between floating islands, explore the
-castle, and recover the 10 lost sky crystals.
+A stylized 3D adventure that runs in the browser. A scattered kingdom drifts in
+the endless sky — cross rope bridges between five floating islands, walk into
+the castle through its gatehouse, and recover the 10 lost sky crystals.
 
-Everything is procedural: terrain, castle, trees, sky, and even the audio are
-generated from a seed at load time. No downloaded assets, no build-time bake.
+Built with Three.js and a custom painterly rendering stack; the art direction
+aims at the cel-shaded adventure-game family (soft banded light, painted
+foliage, drawn UI) rather than photorealism or a tech demo.
+
+![Hero view](art-review/after.png)
 
 ## Play
 
@@ -28,55 +31,73 @@ pnpm dev          # http://localhost:5173
 
 **On phones/tablets** the game detects touch and switches to mobile controls:
 left thumb = virtual joystick (push to the rim to run), right thumb = drag to
-look / pinch to zoom, on-screen jump and pause buttons.
+look / pinch to zoom, on-screen jump and pause buttons. Mobile gets its own
+render path (no post-processing) tuned for phone GPUs.
 
 ## What's inside
 
-- **Assets** — professionally made CC0 models by [KayKit](https://kaylousberg.com)
-  (bundled in `public/assets/models/`, see its LICENSE.md): a fully rigged and
-  animated Knight player character (idle/walk/run/jump via AnimationMixer),
-  instanced trees and rocks, and a castle, windmill, cottages, well, and
-  watchtower. Loaded through a central `GLTFLoader` manager with progress on
-  the loading screen; any asset that fails to load falls back to the original
-  procedural mesh so the game never breaks (`?noassets` simulates this).
-- **World** — five floating islands built from an analytic heightfield
-  (the same math drives the render mesh and the collision), rocky skirts,
-  a castle with a walkable courtyard and keep, sagging rope bridges,
-  waterfalls, a pond, and instanced pines/rocks/grass/flowers.
-- **Sky** — full day/night cycle: sun and moon lighting, sunset palette,
-  stars, drifting clouds, fog, and castle windows that glow at night.
-- **Gameplay** — third-person controller with capsule collision, ledge
-  step-up rules, bridge rails, void respawn; 10 crystals to collect,
+- **Painterly renderer** (`src/render/painterly.js`) — a non-photorealistic
+  material stack shared by the whole world: a tinted toon ramp (warm light,
+  blue-violet shadow), sky-coloured rim light along silhouettes, foliage
+  translucency (sun bleeding through leaves), and world-space painted mottling.
+  Sun direction and sky colour feed every material each frame, so the look
+  tracks the full day/night cycle. The player character adds an inverted-hull
+  ink outline — the classic cel contour.
+- **Painted sky** (`src/render/clouds.js`) — a cumulus deck from domain-warped
+  fBm, lit by sampling density toward the sun (silver linings, blue shadowed
+  interiors), over an atmospheric-scattering dome, stars, and a day/night
+  palette.
+- **Authored assets** (all CC0, provenance in [`ASSET_LICENSES.md`](ASSET_LICENSES.md)) —
+  the castle is assembled from the Quaternius Modular Medieval Buildings kit
+  (curtain walls, gatehouse, stepped towers, cloth-animated banners) and merged
+  into a single batched mesh; trees, rocks, bushes and ground flora are
+  Quaternius Stylized Nature models instanced with per-instance tint/lean/scale
+  and an authored foliage palette; the player is KayKit's rigged, animated
+  Knight (idle/walk/run/jump via AnimationMixer). Every asset loads through a
+  central manager and degrades to a procedural fallback if missing
+  (`?noassets` simulates this).
+- **World** — five floating islands from an analytic heightfield (the same
+  math drives rendering and collision), a flattened castle plateau, clump-based
+  meadow grass (26k+ blades in wind), sagging rope bridges, waterfalls, a pond,
+  dirt paths painted in the terrain shader.
+- **Gameplay** — third-person controller with capsule collision, ledge step-up,
+  bridge rails, void respawn, footstep/landing dust and audio; 10 crystals,
   win screen with your time.
-- **Rendering** — pmndrs `postprocessing` pipeline at high quality on real
-  GPUs: N8AO screen-space ambient occlusion, bloom, SMAA, vignette, and a
-  light color grade; image-based lighting from a PMREM capture of the
-  procedural sky, refreshed as the day-night cycle turns.
-- **Performance** — merged geometry (~32 draw calls, ~33k triangles),
-  adaptive quality that steps shadow resolution / pixel ratio up and down
-  to hold frame rate, and a software-rasterizer detector that switches to
-  a fast preset under SwiftShader/llvmpipe (append `?lowgfx` to force it).
+- **UI** (`src/ui/`) — hand-drawn SVG artwork: a winged sky-crystal crest,
+  filigree corner pieces, chamfered cut-plate surfaces, a struck-metal
+  wordmark. No stock component styling.
+- **Performance** — instanced/merged geometry (~62 draw calls, ~136k
+  triangles), adaptive quality stepping, and a software-rasterizer detector
+  that switches to a fast preset (`?lowgfx` forces it).
 
 ## Development
 
 ```bash
 pnpm build        # production build to dist/
 pnpm preview      # serve the production build on :4173
-pnpm test         # Playwright e2e + performance suite (13 tests)
-node scripts/shot.mjs   # headless screenshot tour (needs `pnpm preview` running)
+pnpm test         # Playwright e2e + perf suite (23 tests, desktop + mobile)
+node scripts/visual-gate.mjs   # deterministic render checks (both paths)
+node scripts/ui-gate.mjs       # deterministic UI craft floor
+node scripts/art-shot.mjs art-review/after.png   # reproducible hero framing
 ```
 
-The test suite drives the real game in headless Chromium: it walks from spawn
-across a bridge to a satellite island with no teleports, collects crystals,
-verifies the win state, falls off the world and respawns, and measures FPS on
-a six-waypoint tour (thresholds are calibrated for software rendering in CI;
-`PERF_MIN_FPS` overrides them on real GPUs).
+The test suite drives the real game in headless Chromium: bridge crossings
+with no teleports, crystal collection through the castle gate, win state,
+falling off the world, mobile touch controls, and an FPS tour (thresholds
+calibrated for software rendering in CI; `PERF_MIN_FPS` overrides on real
+GPUs). Two additional deterministic gates assert pixel facts about rendered
+frames and a craft floor for the UI — no vision model involved. Art changes
+are reviewed against `art-review/before.png` / `after.png` captured from the
+same camera by `scripts/art-shot.mjs`.
+
+`tools/router-loop/` vendors a self-driving improvement loop
+(plan → work → verify) whose spec for this repo lives in `island.spec.json`;
+its verify gate runs the full pipeline above, and visual approval stays with
+a human.
 
 ## Deployment
 
 Every push to `main` deploys automatically: the GitHub Actions workflow in
 `.github/workflows/deploy.yml` builds with pnpm and publishes `dist/` to
-GitHub Pages. No manual steps, no deploy branch.
-
-The build uses relative asset paths (`base: './'` in `vite.config.js`), so it
-works from any subpath.
+GitHub Pages. The build uses relative asset paths, so it works from any
+subpath.

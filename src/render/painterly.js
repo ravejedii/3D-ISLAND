@@ -223,3 +223,38 @@ export function painterlyfy(root, opts = {}) {
     o.material = mat;
   });
 }
+
+// Cel outline via inverted hull: a back-face copy of each mesh, displaced
+// along its normals, drawn in a dark ink. This is the classic cel-shaded
+// contour (Wind Waker / Genshin style) and it is what gives a character a
+// clean, deliberate silhouette instead of dissolving into the scene. Works on
+// SkinnedMesh too: the displacement runs before the skinning transform, so the
+// hull follows animation exactly.
+export function addToonOutline(root, { thickness = 0.02, color = 0x241a12 } = {}) {
+  const outlines = [];
+  root.traverse((o) => {
+    if (!(o.isMesh || o.isSkinnedMesh) || o.userData.isOutline) return;
+    // skip hidden meshes (alternate weapon loadouts etc.) — their hulls would
+    // draw as floating ink even though the source mesh is invisible
+    for (let p = o; p; p = p.parent) if (p.visible === false) return;
+    const mat = new THREE.MeshBasicMaterial({ color, side: THREE.BackSide, fog: false });
+    mat.onBeforeCompile = (shader) => {
+      shader.vertexShader = shader.vertexShader.replace(
+        '#include <begin_vertex>',
+        `#include <begin_vertex>\n\ttransformed += normal * ${thickness.toFixed(4)};`,
+      );
+    };
+    const hull = o.isSkinnedMesh ? new THREE.SkinnedMesh(o.geometry, mat) : new THREE.Mesh(o.geometry, mat);
+    if (o.isSkinnedMesh) {
+      hull.bind(o.skeleton, o.bindMatrix);
+      hull.bindMode = o.bindMode;
+    }
+    hull.userData.isOutline = true;
+    hull.castShadow = false;
+    hull.frustumCulled = false;
+    hull.renderOrder = (o.renderOrder || 0) - 1;
+    outlines.push({ src: o, hull });
+  });
+  for (const { src, hull } of outlines) src.parent.add(hull);
+  return outlines.map((o) => o.hull);
+}

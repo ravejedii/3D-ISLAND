@@ -62,7 +62,7 @@ export class World {
       seed: SEED,
       amp: 4.5,
       base: 2.6,
-      plateau: { x: castlePos.x, z: castlePos.z, radius: 20, height: 6.5 },
+      plateau: { x: castlePos.x, z: castlePos.z, radius: 28, height: 6.5 },
       pond: { x: 18, z: 26, radius: 7, depth: 1.6 },
       // fan the grid from flat meadow in the west — a fan near the castle
       // ramp draws lighting spokes across the approach
@@ -208,7 +208,7 @@ export class World {
     // walk into through the south gate.
     // Authored modular architecture first; the old primitive keep only appears
     // if the kit fails to load.
-    const modular = buildModularCastle(models, { x: castlePos.x, z: castlePos.z, groundY: 6.45 });
+    const modular = buildModularCastle(models, { x: castlePos.x, z: castlePos.z, groundY: 6.45, groundAt: (px, pz) => this.main.heightAt(px, pz) });
     this.banners = [];
     if (modular) {
       scene.add(modular.group);

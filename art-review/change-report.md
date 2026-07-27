@@ -100,6 +100,24 @@ variant counts cut, small flora shadow-casting disabled (70 → 62).
 
 ---
 
+## Pass 2 (grounding, trees, knight, README)
+
+- **Castle grounding fixed**: the bailey's diagonal (21.5m) exceeded the 20m
+  plateau, so corner towers hung over falling slope — exactly the "perched toy"
+  look. The plateau now spans 28m (flat past the whole footprint) and every
+  piece is seated on sampled terrain, sunk 0.3m so its base is buried.
+- **Tree presentation rewritten**: the packs' source greens are near-black in
+  linear space and collapsed to silhouettes under the toon ramp. All foliage
+  and trunk colours now pass through an authored HSL remap (sage-to-spring
+  canopy band, warm readable bark) at bake time; giant 2.5x scale outliers
+  capped at 2.0x.
+- **Knight rewritten**: inverted-hull ink outline (skinned, follows animation;
+  hidden alternate weapons excluded after their hulls drew as a floating black
+  smear), atlas lifted ~1.2x so the hero sits a stop brighter than scenery,
+  height 1.85m → 2.05m.
+- **HUD**: crystal count set in the display face, gilded.
+- **README** rewritten to match what the project actually is now.
+
 ## Remaining visible weaknesses
 
 Honest list, from the `after.png` capture:

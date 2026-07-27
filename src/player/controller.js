@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import { clamp } from '../core/rng.js';
-import { painterlyfy } from '../render/painterly.js';
+import { painterlyfy, addToonOutline } from '../render/painterly.js';
 
 const GRAVITY = 30;
 const WALK_SPEED = 7;
@@ -63,13 +63,21 @@ export class Player {
       // normalize to ~1.85m tall regardless of source units
       const box = new THREE.Box3().setFromObject(model);
       const height = Math.max(box.max.y - box.min.y, 0.001);
-      const s = 1.85 / height;
+      const s = 2.05 / height; // a touch larger: the hero must read at gameplay camera distance
       model.scale.setScalar(s);
       model.position.y = -box.min.y * s;
 
       // cloth and armour get the same painted treatment as the world, with a
       // stronger rim so the hero separates from the meadow behind him
       painterlyfy(model, { mottle: 0.12, rim: 0.8, mottleScale: 4.0 });
+      // lift the atlas: KayKit's texture reads dark under the toon ramp, and a
+      // hero should sit a stop brighter than the scenery
+      model.traverse((o) => {
+        if ((o.isMesh || o.isSkinnedMesh) && o.material && o.material.color) o.material.color.setScalar(1.22);
+      });
+      // ink contour: the clean silhouette is what makes a character read as
+      // authored rather than assembled
+      addToonOutline(model, { thickness: 0.02 });
 
       this.mixer = new THREE.AnimationMixer(model);
       // Clip names differ per pack (KayKit: "Running_A"; Quaternius:

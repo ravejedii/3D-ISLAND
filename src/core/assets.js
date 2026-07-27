@@ -85,7 +85,7 @@ export function bakeToGeometry(gltf, mergeGeometries) {
 // "Green" materials, flat colors, no textures) into ONE geometry whose colors
 // live in a vertex-color attribute — so a single InstancedMesh can draw it and
 // still show every material. Returns { geometry, material } or null.
-export function bakeColored(gltf, mergeGeometries, { roughness = 0.92, foliage = 0, mottle = 0.16, rim = 0.5, mottleScale = 0.35 } = {}) {
+export function bakeColored(gltf, mergeGeometries, { roughness = 0.92, foliage = 0, mottle = 0.16, rim = 0.5, mottleScale = 0.35, remap = null } = {}) {
   if (!gltf) return null;
   const geos = [];
   gltf.scene.updateMatrixWorld(true);
@@ -97,7 +97,10 @@ export function bakeColored(gltf, mergeGeometries, { roughness = 0.92, foliage =
     }
     const geo = g.toNonIndexed();
     const n = geo.attributes.position.count;
-    const col = (o.material && o.material.color) || new THREE.Color(0xffffff);
+    let col = (o.material && o.material.color) || new THREE.Color(0xffffff);
+    // optional authored palette remap: source packs often ship very dark
+    // linear colours that collapse to silhouettes under a toon ramp
+    if (remap) col = remap(col.clone(), o.material ? o.material.name : '');
     const colors = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
       colors[i * 3] = col.r;
