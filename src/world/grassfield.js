@@ -147,8 +147,14 @@ export class GrassField {
     this.count = n;
   }
 
-  update(t, fogColor) {
+  // the blades carry their own fog because they are a raw ShaderMaterial —
+  // they must be handed the scene's exact fog or the meadow's far edge
+  // disagrees with the terrain it grows out of
+  update(t, fog) {
     this.uniforms.uTime.value = t;
-    if (fogColor) this.uniforms.fogColor.value.copy(fogColor);
+    if (!fog) return;
+    this.uniforms.fogColor.value.copy(fog.color);
+    this.uniforms.fogNear.value = fog.near;
+    this.uniforms.fogFar.value = fog.far;
   }
 }

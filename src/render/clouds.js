@@ -91,8 +91,13 @@ export function makeCloudDome(radius = 1700) {
         // one just fogs the sky
         float density = smoothstep(uCoverage, uCoverage + 0.13, d);
 
-        // fade the deck out near the horizon so it reads as distance, not a wall
-        float horizon = smoothstep(0.03, 0.26, vDir.y);
+        // Fade the deck out near the horizon so it reads as distance, not a
+        // wall. This floor is high on purpose: a cumulus deck has a BASE, and
+        // the strip of clear sky under it is what gives a landscape its
+        // horizon. With the old 0.03 floor the deck was still ~70% opaque at
+        // the skyline, which painted a white band behind everything in the
+        // world and flattened the whole frame.
+        float horizon = smoothstep(0.10, 0.40, vDir.y);
         density *= horizon;
 
         // light the cloud: sample density a step toward the sun — less density
