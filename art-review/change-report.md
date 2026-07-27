@@ -133,6 +133,24 @@ variant counts cut, small flora shadow-casting disabled (70 → 62).
   either side of the crown, and a sun-dried straw verge where grass gives out
   before the bare track.
 
+## Pass 5 (sky clipping + terrain zoning — parallel agent)
+
+- **The horizon diagnosis was wrong, and a debug tint proved it**: the "band"
+  was the entire lower sky clipping flat — the scattering dome outputs several
+  times display white and ACES crushed everything below ~0.5 rad to uniform
+  grey. Fixed at the source with a scale-free luminance rolloff graded into
+  the dome (gentle overall, strong through the horizon, re-hued to the
+  palette's blue at constant luminance), verified across six times of day on
+  both render paths. Cloud deck base raised off the skyline; fog pulled in to
+  88→400 so the satellite islands finally receive aerial perspective; god
+  rays and bloom eased.
+- **Terrain zoning as landform**: six seeded ridge capsules (src/world/zones.js)
+  feed the terrain shader as uniforms (exposed-earth halo + two-scale scree),
+  deal boulders along the ridge spine with a size gradient into the existing
+  rock InstancedMeshes (zero extra draw calls), and exclude vegetation — one
+  definition, three consumers, no drift. Stone palette authored to warm mid
+  grey; ambient rock scatter halved so the mass lives in the ridges.
+
 ## Remaining visible weaknesses
 
 Honest list, from the `after.png` capture:
