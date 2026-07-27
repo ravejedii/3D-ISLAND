@@ -1,5 +1,6 @@
 import * as THREE from 'three';
 import { clamp } from '../core/rng.js';
+import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { painterlyfy, addToonOutline } from '../render/painterly.js';
 
 const GRAVITY = 30;
@@ -70,14 +71,55 @@ export class Player {
       // cloth and armour get the same painted treatment as the world, with a
       // stronger rim so the hero separates from the meadow behind him
       painterlyfy(model, { mottle: 0.12, rim: 0.8, mottleScale: 4.0 });
-      // lift the atlas: KayKit's texture reads dark under the toon ramp, and a
-      // hero should sit a stop brighter than the scenery
+      // Author the hero's identity per part (the meshes are named) so he
+      // belongs to THIS game's heraldry instead of reading as a stock asset:
+      // deep crimson cape matching the castle banners, cool steel plate a stop
+      // brighter than the scenery, warmed leather.
       model.traverse((o) => {
-        if ((o.isMesh || o.isSkinnedMesh) && o.material && o.material.color) o.material.color.setScalar(1.22);
+        if (!(o.isMesh || o.isSkinnedMesh) || !o.material || !o.material.color) return;
+        o.material = o.material.clone();
+        if (/Cape/i.test(o.name)) o.material.color.setRGB(1.15, 0.62, 0.66); // wine-crimson over the atlas red
+        else if (/Helmet|Arm|Leg/i.test(o.name)) o.material.color.setRGB(1.28, 1.32, 1.42); // cool steel
+        else if (/Shield/i.test(o.name)) o.material.color.setRGB(1.3, 1.18, 0.95); // warm boss
+        else o.material.color.setScalar(1.22);
       });
       // ink contour: the clean silhouette is what makes a character read as
       // authored rather than assembled
-      addToonOutline(model, { thickness: 0.02 });
+      addToonOutline(model, { thickness: 0.02, nameFilter: /Body|Cape|Helmet|Head/ });
+
+      // Plume crest on the helmet (added AFTER the outline pass on purpose: a
+      // solid crimson crest gains nothing from an ink hull, and skipping it
+      // saves a draw call): an arced fan of blades that gives the
+      // silhouette a readable identity at any distance. Parented to the head
+      // bone so it moves with the animation.
+      // parent to the helmet mesh node (not the bone): its local space is the
+      // space the helmet geometry lives in, so the crest can be seated from the
+      // helmet's real bounding box instead of guessed bone offsets
+      const helmetNode = model.getObjectByName('Knight_Helmet');
+      if (helmetNode && helmetNode.geometry) {
+        helmetNode.geometry.computeBoundingBox();
+        const hb = helmetNode.geometry.boundingBox;
+        const blades = [];
+        for (let i = 0; i < 5; i++) {
+          const t = i / 4;
+          const g = new THREE.ConeGeometry(0.05 - t * 0.02, 0.26 + Math.sin(t * Math.PI) * 0.10, 5);
+          g.translate(0, 0.17, 0);
+          g.rotateX(-0.35 - t * 1.05); // sweep back over the crown, lying flatter
+          blades.push(g);
+        }
+        const plumeGeo = mergeGeometries(blades.map((g) => g.toNonIndexed()));
+        plumeGeo.computeVertexNormals();
+        const plume = new THREE.Mesh(
+          plumeGeo,
+          new THREE.MeshToonMaterial({ color: 0x9e1f2e, gradientMap: null }),
+        );
+        plume.castShadow = true;
+        plume.position.set(0, hb.max.y - 0.02, (hb.min.z + hb.max.z) / 2 - 0.03);
+        const helmetW = hb.max.x - hb.min.x;
+        plume.scale.setScalar(Math.max(0.6, helmetW * 1.25));
+        helmetNode.add(plume);
+        this.plume = plume;
+      }
 
       this.mixer = new THREE.AnimationMixer(model);
       // Clip names differ per pack (KayKit: "Running_A"; Quaternius:

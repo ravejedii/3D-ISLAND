@@ -230,10 +230,13 @@ export function painterlyfy(root, opts = {}) {
 // clean, deliberate silhouette instead of dissolving into the scene. Works on
 // SkinnedMesh too: the displacement runs before the skinning transform, so the
 // hull follows animation exactly.
-export function addToonOutline(root, { thickness = 0.02, color = 0x241a12 } = {}) {
+export function addToonOutline(root, { thickness = 0.02, color = 0x241a12, nameFilter = null } = {}) {
   const outlines = [];
   root.traverse((o) => {
     if (!(o.isMesh || o.isSkinnedMesh) || o.userData.isOutline) return;
+    // each hull is a draw call — restrict to the meshes that define the
+    // silhouette when a filter is given
+    if (nameFilter && !nameFilter.test(o.name)) return;
     // skip hidden meshes (alternate weapon loadouts etc.) — their hulls would
     // draw as floating ink even though the source mesh is invisible
     for (let p = o; p; p = p.parent) if (p.visible === false) return;

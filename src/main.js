@@ -109,8 +109,8 @@ const models = await assets.loadAll({
   windmill: 'buildings/building_windmill_blue.gltf',
   homeA: 'buildings/building_home_A_blue.gltf',
   homeB: 'buildings/building_home_B_blue.gltf',
-  well: 'buildings/building_well_blue.gltf',
-  tower: 'buildings/building_tower_A_blue.gltf',
+  hamletWell: 'buildings/building_well_blue.gltf',
+  hamletTower: 'buildings/building_tower_A_blue.gltf',
 });
 
 // phones get the cheap palette sky too: the atmospheric-scattering shader is
@@ -544,6 +544,7 @@ window.__game = {
     player.velocity.set(0, 0, 0);
   },
   setYaw(y) { tpCamera.yaw = y; },
+  setHeading(h) { player.heading = h; player.group.rotation.y = h; },
   // pitch/distance are exposed so art-review screenshots can reproduce the
   // exact same hero framing before and after a change
   setPitch(p) { tpCamera.pitch = p; },

@@ -241,9 +241,9 @@ export class World {
     const buildingPlan = [
       { gltf: models.homeA, x: 30, z: 12, scale: 4.4, rotY: 2.6, shrink: 0.8 },
       { gltf: models.homeB, x: 36, z: 21, scale: 4.4, rotY: -2.2, shrink: 0.8 },
-      { gltf: models.well, x: 29.5, z: 19, scale: 3.2, rotY: 0.6, shrink: 0.85 },
+      { gltf: models.hamletWell, x: 29.5, z: 19, scale: 3.2, rotY: 0.6, shrink: 0.85 },
       { gltf: models.windmill, isl: 1, dx: 2, dz: 3, scale: 6, rotY: 2.4, shrink: 0.6 },
-      { gltf: models.tower, isl: 0, dx: 6, dz: 5, scale: 5, rotY: 1.2, shrink: 0.7 },
+      { gltf: models.hamletTower, isl: 0, dx: 6, dz: 5, scale: 5, rotY: 1.2, shrink: 0.7 },
     ];
     for (const b of buildingPlan) {
       if (!b.gltf) continue;

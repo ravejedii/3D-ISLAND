@@ -12,12 +12,19 @@ foliage, drawn UI) rather than photorealism or a tech demo.
 
 ![Hero view](art-review/after.png)
 
-## Play
+## Run it locally
+
+Prerequisites: **Node 20+** and **pnpm** (`corepack enable` ships pnpm with Node).
 
 ```bash
-pnpm install
-pnpm dev          # http://localhost:5173
+git clone https://github.com/ravejedii/3D-ISLAND.git
+cd 3D-ISLAND
+pnpm install      # exact versions from pnpm-lock.yaml
+pnpm dev          # http://localhost:5173 — hot reload, no other services needed
 ```
+
+There is no backend, no database, no API keys: the entire game is static files.
+`pnpm build && pnpm preview` serves the exact bundle that ships to production.
 
 | Input | Action |
 | --- | --- |
@@ -69,6 +76,27 @@ render path (no post-processing) tuned for phone GPUs.
 - **Performance** — instanced/merged geometry (~62 draw calls, ~136k
   triangles), adaptive quality stepping, and a software-rasterizer detector
   that switches to a fast preset (`?lowgfx` forces it).
+
+## Project structure
+
+```
+src/
+  main.js            entry: renderer, post chain, asset manifest, game loop
+  core/assets.js     glTF manager — progress, caching, procedural fallbacks
+  render/            painterly.js (NPR materials) · clouds.js (sky deck)
+  world/             islands, castle_modular, props, grassfield, sky, water…
+  player/            controller.js (movement + animation) · camera.js
+  ui/                hud.js · frames.js (hand-drawn SVG) · style.css · touch.js
+  effects/dust.js    pooled traversal particles
+public/assets/models CC0 GLB/GLTF assets (provenance: ASSET_LICENSES.md)
+scripts/             visual-gate, ui-gate, art-shot, decimate-glb
+tests/               Playwright: e2e, perf budget, mobile
+tools/router-loop/   vendored self-driving improvement loop (island.spec.json)
+art-review/          before/after hero captures + change reports
+```
+
+Every bundled asset's author, license and source URL is recorded in
+[`ASSET_LICENSES.md`](ASSET_LICENSES.md) — all CC0, nothing ripped.
 
 ## Development
 
