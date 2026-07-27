@@ -51,6 +51,32 @@ function boxCollider(minX, maxX, minZ, maxZ, minY, maxY) {
   return { type: 'box', minX, maxX, minZ, maxZ, minY, maxY };
 }
 
+// ---------------------------------------------------------------------------
+// The kingdom's palette. This is the single authored colour script for every
+// piece of architecture in the world — the castle bakes it by material name
+// below, and the hamlet (src/world/hamlet.js) bakes the same colours out of
+// the KayKit atlas, so the outbuildings read as the same masons' work.
+//
+// The mirror's GLBs lost the pack's palette texture — every material is flat
+// 0.8 grey — but the material NAMES survive, so the palette is authored here
+// by name. Values are chosen for the frame's value structure: the castle must
+// read as a warm mid-dark mass against a bright sky, not wash into it.
+// (Linear-sRGB working space, as THREE.Color(r,g,b) is interpreted.)
+export const STONE_PALETTE = {
+  lightrock: new THREE.Color(0.360, 0.320, 0.270), // warm face stone
+  darkrock: new THREE.Color(0.200, 0.185, 0.170),  // trim / shadow courses
+  celing: new THREE.Color(0.115, 0.175, 0.265),    // slate roofs (game's blue)
+  lightwood: new THREE.Color(0.330, 0.215, 0.115), // timber
+  banner: new THREE.Color(0.430, 0.075, 0.085),    // heraldic crimson
+  black: new THREE.Color(0.055, 0.050, 0.048),     // iron
+};
+
+export const stoneColorFor = (matName) => {
+  const key = String(matName || '').toLowerCase().replace(/[^a-z]/g, '');
+  for (const k of Object.keys(STONE_PALETTE)) if (key.startsWith(k)) return STONE_PALETTE[k];
+  return STONE_PALETTE.lightrock;
+};
+
 // models: { wall, wallTall, wallEntrance, towerLarge, towerPointy, tower,
 //           towerSmall, watchtower, banner, door, window, well }
 export function buildModularCastle(models, { x, z, groundY, groundAt = null }) {
@@ -171,24 +197,8 @@ export function buildModularCastle(models, { x, z, groundY, groundAt = null }) {
   // colours, so their material colour is baked into a vertex-colour attribute
   // and the whole castle is merged into ONE mesh with a single painted
   // material. Banners stay separate because they animate.
-  // The mirror's GLBs lost the pack's palette texture — every material is flat
-  // 0.8 grey — but the material NAMES survive, so the palette is authored here
-  // by name. Values are chosen for the frame's value structure: the castle must
-  // read as a warm mid-dark mass against a bright sky, not wash into it.
-  const STONE_PALETTE = {
-    lightrock: new THREE.Color(0.360, 0.320, 0.270), // warm face stone
-    darkrock: new THREE.Color(0.200, 0.185, 0.170),  // trim / shadow courses
-    celing: new THREE.Color(0.115, 0.175, 0.265),    // slate roofs (game's blue)
-    lightwood: new THREE.Color(0.330, 0.215, 0.115), // timber
-    banner: new THREE.Color(0.430, 0.075, 0.085),    // heraldic crimson
-    black: new THREE.Color(0.055, 0.050, 0.048),     // iron
-  };
-  const stoneColorFor = (matName) => {
-    const key = String(matName || '').toLowerCase().replace(/[^a-z]/g, '');
-    for (const k of Object.keys(STONE_PALETTE)) if (key.startsWith(k)) return STONE_PALETTE[k];
-    return STONE_PALETTE.lightrock;
-  };
-
+  // Colours come from the module-scope STONE_PALETTE / stoneColorFor above,
+  // which the hamlet shares so both read as the same masons' work.
   const bannerSet = new Set(banners);
   const geos = [];
   const leftovers = [];
