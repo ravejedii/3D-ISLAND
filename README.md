@@ -48,8 +48,7 @@ render path (no post-processing) tuned for phone GPUs.
   blue-violet shadow), sky-coloured rim light along silhouettes, foliage
   translucency (sun bleeding through leaves), and world-space painted mottling.
   Sun direction and sky colour feed every material each frame, so the look
-  tracks the full day/night cycle. The player character adds an inverted-hull
-  ink outline — the classic cel contour.
+  tracks the full day/night cycle.
 - **Painted sky** (`src/render/clouds.js`) — a cumulus deck from domain-warped
   fBm, lit by sampling density toward the sun (silver linings, blue shadowed
   interiors), over an atmospheric-scattering dome, stars, and a day/night

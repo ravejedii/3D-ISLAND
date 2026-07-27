@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { clamp } from '../core/rng.js';
 import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
-import { painterlyfy, addToonOutline } from '../render/painterly.js';
+import { painterlyfy } from '../render/painterly.js';
 
 const GRAVITY = 30;
 const WALK_SPEED = 7;
@@ -83,9 +83,6 @@ export class Player {
         else if (/Shield/i.test(o.name)) o.material.color.setRGB(1.3, 1.18, 0.95); // warm boss
         else o.material.color.setScalar(1.22);
       });
-      // ink contour: the clean silhouette is what makes a character read as
-      // authored rather than assembled
-      addToonOutline(model, { thickness: 0.02, nameFilter: /Body|Cape|Helmet|Head/ });
 
       // Plume crest on the helmet (added AFTER the outline pass on purpose: a
       // solid crimson crest gains nothing from an ink hull, and skipping it
@@ -100,11 +97,13 @@ export class Player {
         helmetNode.geometry.computeBoundingBox();
         const hb = helmetNode.geometry.boundingBox;
         const blades = [];
-        for (let i = 0; i < 5; i++) {
-          const t = i / 4;
-          const g = new THREE.ConeGeometry(0.05 - t * 0.02, 0.26 + Math.sin(t * Math.PI) * 0.10, 5);
-          g.translate(0, 0.17, 0);
-          g.rotateX(-0.35 - t * 1.05); // sweep back over the crown, lying flatter
+        // dense overlapping blades merge into one horsehair crest instead of
+        // reading as separate spikes
+        for (let i = 0; i < 9; i++) {
+          const t = i / 8;
+          const g = new THREE.ConeGeometry(0.055 - t * 0.02, 0.20 + Math.sin(t * Math.PI) * 0.07, 5);
+          g.translate(0, 0.10, 0);
+          g.rotateX(-0.30 - t * 1.15); // sweep back over the crown
           blades.push(g);
         }
         const plumeGeo = mergeGeometries(blades.map((g) => g.toNonIndexed()));
