@@ -9,9 +9,13 @@ import { RNG, clamp, lerp, smoothstep } from '../core/rng.js';
 
 const DAY_LENGTH = 240; // seconds per full cycle
 
+// Horizon and fog are deliberately the SAME family of blues at every hour: the
+// point of aerial perspective is that distance dissolves into sky, so a fog
+// colour that disagrees with the horizon reads as haze sitting in front of the
+// world instead of air inside it.
 const PAL = {
-  day: { top: 0x4287d6, horizon: 0xbfe2f2, fog: 0x93b8d8, sun: 0xfff3d6, hemiSky: 0xcae0ff, hemiGround: 0x8b9c63 },
-  sunset: { top: 0x35418c, horizon: 0xff9d5c, fog: 0xc39067, sun: 0xffb46b, hemiSky: 0xd99c7c, hemiGround: 0x6a5a4c },
+  day: { top: 0x3d80cf, horizon: 0x9ecde8, fog: 0x9dc7e2, sun: 0xfff3d6, hemiSky: 0xcae0ff, hemiGround: 0x8b9c63 },
+  sunset: { top: 0x35418c, horizon: 0xe8905f, fog: 0xc0906f, sun: 0xffb46b, hemiSky: 0xd99c7c, hemiGround: 0x6a5a4c },
   night: { top: 0x0a1028, horizon: 0x233158, fog: 0x1a2240, sun: 0x9db4ff, hemiSky: 0x33415f, hemiGround: 0x232630 },
 };
 
@@ -38,6 +42,10 @@ export class Sky {
       this.atmo.rayleigh.value = 1.6;
       this.atmo.mieCoefficient.value = 0.0022;
       this.atmo.mieDirectionalG.value = 0.85;
+      // the addon ships its own fbm cloud layer; clouds.js already owns that
+      // job and the addon's version only added white wisps near the horizon
+      this.atmo.cloudCoverage.value = 0;
+      gradeHorizonBand(this.dome.material);
       scene.add(this.dome);
     }
 
@@ -124,7 +132,12 @@ export class Sky {
     this.moon.scale.setScalar(110);
     scene.add(this.moon);
 
-    scene.fog = new THREE.Fog(PAL.day.fog, 260, 980); // start past the far islands' midground so distance tints blue instead of whiting out
+    // Aerial perspective. The old range (260 -> 980) began past everything in
+    // the world, so the satellite islands were rendered at full contrast in
+    // front of a blazing horizon — the classic depth-flattener. Fog now starts
+    // just beyond the castle and reaches its full tint around the far islands,
+    // so distance genuinely fades toward the same blue the sky is.
+    scene.fog = new THREE.Fog(PAL.day.fog, 88, 400);
 
     this._colA = new THREE.Color();
     this.nightFactor = 0;
@@ -187,6 +200,13 @@ export class Sky {
       this.atmo.rayleigh.value = lerp(1.05, 3.2, sunsetF);
       this.atmo.turbidity.value = lerp(3.2, 8.5, sunsetF);
       this.atmo.mieCoefficient.value = lerp(0.0028, 0.0075, sunsetF);
+      // the graded band tracks the palette, so the horizon stays the same
+      // colour the fog is at every hour of the cycle
+      this.atmo.uHorizonColor.value.copy(mix3('horizon'));
+      // let the band open up at sunset — that glow is the point of a sunset —
+      // but keep it clamped hard through the working hours of the day
+      this.atmo.uHorizonTint.value = lerp(0.85, 0.35, sunsetF);
+      this.atmo.uHorizonRoll.value = lerp(3.0, 0.9, sunsetF);
     } else {
       this.scene.background.copy(mix3('horizon'));
     }
@@ -217,7 +237,10 @@ export class Sky {
       u.uSkyColor.value.copy(mix3('horizon'));
       // clouds go warm at golden hour and deep blue at night, like the sky
       u.uCloudColor.value.copy(mix3('sun')).lerp(new THREE.Color(0xffffff), 0.55);
-      u.uShadowColor.value.copy(mix3('fog')).multiplyScalar(0.82);
+      // give the deck real form: a shadow side that actually reads as shadow
+      // is what stops the upper half of the frame going milky, and a sky with
+      // internal contrast is what makes a calm horizon look deliberate
+      u.uShadowColor.value.copy(mix3('fog')).multiplyScalar(0.62).lerp(new THREE.Color(0x6f8fbe), 0.35);
       this.clouds.mesh.position.copy(playerPos);
     }
     this.hemi.color.copy(mix3('hemiSky'));
@@ -255,6 +278,62 @@ export class Sky {
     if (this.dome) this.dome.position.copy(playerPos);
     this.stars.position.set(playerPos.x, 0, playerPos.z);
   }
+}
+
+// Grade the scattering dome.
+//
+// Preetham's model is right: at grazing angles the optical path through the
+// atmosphere is enormous, every wavelength saturates, and the horizon goes
+// near-white. Its output is also genuinely HDR — several times display white —
+// and the composer's ACES pass was clipping the entire lower half of the sky
+// to a flat 218/218/218 sheet. That sheet, not a narrow band, is what sat
+// behind the castle: the silhouette that should have been the darkest mass in
+// the frame had nothing to be dark against.
+//
+// Turbidity can't fix it (dropping it far enough to calm the horizon also
+// kills the sunset), so the dome is graded after the fact:
+//
+//   * a scale-free luminance rolloff, `l / (1 + l * k)` — bright values are
+//     compressed hard, calm ones are left alone, so this behaves at noon, at
+//     dusk and at night without a single magic absolute threshold. `k` is
+//     small over the dome as a whole (just enough to keep the sky inside the
+//     display range, which is what lets its blue show at all) and large
+//     through the horizon band.
+//   * a re-hue toward the palette's horizon blue at constant luminance, so
+//     what is left of the band is sky rather than glare.
+//
+// The band weight falls off with elevation, so the zenith, the clouds and the
+// sun's own disc are essentially untouched.
+function gradeHorizonBand(mat) {
+  mat.uniforms.uHorizonColor = { value: new THREE.Color(PAL.day.horizon) };
+  mat.uniforms.uHorizonSpread = { value: 0.55 };
+  mat.uniforms.uSkyRoll = { value: 0.55 };
+  mat.uniforms.uHorizonRoll = { value: 3.0 };
+  mat.uniforms.uHorizonTint = { value: 0.85 };
+  mat.fragmentShader = mat.fragmentShader
+    .replace(
+      'uniform float mieDirectionalG;',
+      `uniform float mieDirectionalG;
+      uniform vec3 uHorizonColor;
+      uniform float uHorizonSpread;
+      uniform float uSkyRoll;
+      uniform float uHorizonRoll;
+      uniform float uHorizonTint;`,
+    )
+    .replace(
+      'gl_FragColor = vec4( texColor, 1.0 );',
+      `{
+        const vec3 LW = vec3( 0.2126, 0.7152, 0.0722 );
+        float band = 1.0 - smoothstep( -0.08, uHorizonSpread, direction.y );
+        band = pow( band, 1.5 );
+        float lum = max( dot( texColor, LW ), 1e-5 );
+        float rolled = lum / ( 1.0 + lum * mix( uSkyRoll, uHorizonRoll, band ) );
+        texColor *= rolled / lum;
+        float hl = max( dot( uHorizonColor, LW ), 1e-5 );
+        texColor = mix( texColor, uHorizonColor * ( dot( texColor, LW ) / hl ), band * uHorizonTint );
+      }
+      gl_FragColor = vec4( texColor, 1.0 );`,
+    );
 }
 
 // Painterly cloud texture: layered soft puffs with a flatter base.

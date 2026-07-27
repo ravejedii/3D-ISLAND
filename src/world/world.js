@@ -4,7 +4,8 @@ import { Island } from './islands.js';
 import { Bridge } from './bridges.js';
 import { buildCastle, buildCourtyard, buildGateTorches } from './castle.js';
 import { buildModularCastle, updateBanners } from './castle_modular.js';
-import { placeModel } from '../core/assets.js';
+import { placeHamletBuilding } from './hamlet.js';
+import { buildWaymark } from './waymark.js';
 import CustomShaderMaterial from 'three-custom-shader-material/vanilla';
 import { sharedToonRamp, painterlyGlobals } from '../render/painterly.js';
 import { buildProps } from './props.js';
@@ -12,6 +13,7 @@ import { Sky } from './sky.js';
 import { buildPond, buildWaterfall } from './water.js';
 import { Ambient } from './ambient.js';
 import { GrassField } from './grassfield.js';
+import { buildRockZones, rockZoneField, MAX_ROCK_ZONES } from './zones.js';
 import { RNG } from '../core/rng.js';
 
 const SEED = 20260712;
@@ -98,6 +100,12 @@ export class World {
         uCliff: { value: new THREE.Color(0x998772) },
         uPath: { value: new THREE.Color(0xc9a26a) },
         uPathSegs: { value: PATH_SEGMENTS.map(([a, b, c, d]) => new THREE.Vector4(a, b, c, d)) },
+        // rock outcrop ridges — filled in below, once the zones have been
+        // placed against the paths and landmarks they have to avoid
+        uScree: { value: new THREE.Color(0xa39b90) },
+        uSoil: { value: new THREE.Color(0x8b7050) },
+        uRockZones: { value: Array.from({ length: MAX_ROCK_ZONES }, () => new THREE.Vector4(1e5, 1e5, 1e5, 1e5)) },
+        uRockZoneR: { value: new Array(MAX_ROCK_ZONES).fill(0) },
       },
       vertexShader: /* glsl */ `
         varying vec3 vWPos;
@@ -113,6 +121,10 @@ export class World {
         uniform vec3 uCliff;
         uniform vec3 uPath;
         uniform vec4 uPathSegs[8];
+        uniform vec3 uScree;
+        uniform vec3 uSoil;
+        uniform vec4 uRockZones[8];
+        uniform float uRockZoneR[8];
         float distSeg(vec2 p, vec2 a, vec2 b) {
           vec2 ab = b - a;
           float t = clamp(dot(p - a, ab) / dot(ab, ab), 0.0, 1.0);
@@ -148,9 +160,41 @@ export class World {
           float rockMix = smoothstep(0.42, 0.62, slope);
           vec3 cliff = uCliff * (0.84 + vnoise(vWPos.xz * 0.35 + vWPos.y * 0.2) * 0.28);
           base = mix(base, cliff, rockMix * 0.85);
+          vec2 p = vWPos.xz;
+          // --- rock outcrop ridges -------------------------------------
+          // Bedrock surfacing through the turf. These are the same capsules
+          // props.js seeds boulders along, so scree always appears under
+          // rocks and never on open lawn.
+          float rz = 1e6;
+          for (int i = 0; i < 8; i++) {
+            rz = min(rz, distSeg(p, uRockZones[i].xy, uRockZones[i].zw) - uRockZoneR[i]);
+          }
+          // The capsule distance above is a handful of ALU ops, but the paint
+          // below is six noise lookups, and the ridges cover a few percent of
+          // the island. Gating on proximity keeps that cost off every other
+          // terrain fragment — which matters: this shader is the single
+          // biggest per-pixel cost on the software-rasterizer path, where the
+          // frame-rate floor lives. The bound is the largest displacement the
+          // wobble below can apply plus the paint's own falloff.
+          if (rz < 7.5) {
+            // three octaves of wobble turn a lozenge into an eroded outline
+            // with fingers of loose stone running out of the ridge
+            rz += (vnoise(p * 0.17 + 21.0) - 0.5) * 5.6
+                + (vnoise(p * 0.58) - 0.5) * 2.0
+                + (vnoise(p * 1.9) - 0.5) * 0.7;
+            float outcrop = (1.0 - smoothstep(-1.2, 3.2, rz)) * (1.0 - rockMix);
+            // the halo first: turf worn back to bare earth around the stone
+            base = mix(base, uSoil * (0.90 + vnoise(p * 0.85) * 0.24), outcrop * 0.66);
+            // then dry scree over the core. Two scales of grit plus a sparse
+            // band of darker chips, so the ground under the boulders is
+            // broken stone rather than a flat tan fill.
+            float grit = vnoise(p * 2.9) * 0.55 + vnoise(p * 9.1) * 0.45;
+            vec3 screeCol = uScree * (0.76 + grit * 0.48);
+            screeCol = mix(screeCol, screeCol * 0.70, smoothstep(0.60, 0.88, vnoise(p * 5.5 + 3.0)) * 0.8);
+            base = mix(base, screeCol, smoothstep(0.28, 0.95, outcrop) * 0.88);
+          }
           // worn dirt paths, wobbled by noise so edges aren't ruler-straight
           float pd = 1e6;
-          vec2 p = vWPos.xz;
           for (int i = 0; i < 8; i++) {
             pd = min(pd, distSeg(p, uPathSegs[i].xy, uPathSegs[i].zw));
           }
@@ -237,6 +281,11 @@ export class World {
     }
 
     // --- hamlet + satellite landmarks (model-only garnish) ---
+    // These are KayKit hexagon-pack buildings, whose "_blue" variants ship a
+    // poster palette (cobalt roofs, pillar-box timber, white plaster) that
+    // belonged to a different game than the castle. placeHamletBuilding()
+    // re-authors their shared colour atlas into the castle's palette — see
+    // src/world/hamlet.js for the cell-by-cell mapping.
     this.buildingSpots = [];
     const buildingPlan = [
       { gltf: models.homeA, x: 30, z: 12, scale: 4.4, rotY: 2.6, shrink: 0.8 },
@@ -251,10 +300,23 @@ export class World {
       const bz = b.isl !== undefined ? this.satellites[b.isl].center.z + b.dz : b.z;
       const ground = this.groundHeightIslands(bx, bz);
       if (!isFinite(ground)) continue;
-      const placed = placeModel(b.gltf, { x: bx, z: bz, y: ground - 0.1, scale: b.scale, rotY: b.rotY, colliderShrink: b.shrink });
+      const placed = placeHamletBuilding(b.gltf, { x: bx, z: bz, y: ground - 0.1, scale: b.scale, rotY: b.rotY, colliderShrink: b.shrink });
+      if (!placed) continue;
       scene.add(placed.model);
       this.colliders.push(...placed.colliders);
       this.buildingSpots.push({ x: bx, z: bz, r: 3.2 * (b.scale / 4.4) });
+    }
+
+    // --- foreground framing: waymarker stones west of the spawn track ---
+    // A near-field vertical mass at the left frame edge, so the hero view has
+    // a depth step instead of one flat plane. Deliberately off the paths and
+    // off every test route; absent entirely if the rock models didn't load.
+    const waymark = buildWaymark(models, { groundAt: (px, pz) => this.groundHeightIslands(px, pz) });
+    if (waymark) {
+      scene.add(waymark.mesh);
+      this.colliders.push(...waymark.colliders);
+      // registering them as building spots keeps scattered props and grass out
+      this.buildingSpots.push(...waymark.spots);
     }
 
     // --- pond + waterfalls ---
@@ -289,17 +351,44 @@ export class World {
     }
     const exclude = (x, z) => clearZones.every((c) => Math.hypot(x - c.x, z - c.z) > c.r)
       && pathDistance(x, z) > 2.4;
-    const props = buildProps(this.islands, { seed: SEED + 99, exclude, models });
+
+    // --- crystals ---
+    // Built before the props so the outcrop zones below can be kept off them:
+    // the e2e run walks into every crystal, and a boulder field around one is
+    // a thing to get wedged on.
+    this.crystals = this.buildCrystals();
+
+    // --- terrain zoning: rock outcrop ridges ---
+    // The meadow was one continuous green from rim to rim. These ridges are
+    // the geology that breaks it. They are deliberately kept well off the
+    // painted paths (which are also the walking routes), off the castle
+    // plateau, and off every crystal.
+    const zoneOK = (x, z, r) => pathDistance(x, z) > r + 6
+      && clearZones.every((c) => Math.hypot(x - c.x, z - c.z) > c.r + r + 2)
+      && this.crystals.every((c) => Math.hypot(x - c.x, z - c.z) > r + 5);
+    // seed chosen from a scan of the constraint set: it is the one that places
+    // six ridges with real spread across the island AND puts one across the
+    // castle approach, where the meadow was most obviously empty
+    this.rockZones = buildRockZones({ island: this.main, seed: SEED + 531, ok: zoneOK });
+    for (let i = 0; i < this.rockZones.length; i++) {
+      const zn = this.rockZones[i];
+      terrainMat.uniforms.uRockZones.value[i].set(zn.x1, zn.z1, zn.x2, zn.z2);
+      terrainMat.uniforms.uRockZoneR.value[i] = zn.r;
+    }
+    // vegetation stops at the scree line — grass growing out of bare rock is
+    // exactly the "sprinkled props" read this pass exists to remove
+    const excludeVeg = (x, z) => exclude(x, z) && rockZoneField(this.rockZones, x, z) > 1.0;
+
+    const props = buildProps(this.islands, {
+      seed: SEED + 99, exclude, excludeVeg, rockZones: this.rockZones, models,
+    });
     scene.add(props.group);
     this.colliders.push(...props.colliders);
     this.updatables.push((dt, t) => (props.windTime.value = t));
 
     // dense shader grass on the main island meadows (quality-gated in main.js)
-    this.grassField = new GrassField(scene, this.main, exclude);
-    this.updatables.push((dt, t) => this.grassField.update(t, this.scene.fog.color));
-
-    // --- crystals ---
-    this.crystals = this.buildCrystals();
+    this.grassField = new GrassField(scene, this.main, excludeVeg);
+    this.updatables.push((dt, t) => this.grassField.update(t, this.scene.fog));
 
     // --- sky ---
     this.sky = new Sky(scene, { cheap: cheapSky });

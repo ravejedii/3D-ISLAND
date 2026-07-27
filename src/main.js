@@ -136,11 +136,15 @@ if ((!softwareGL && !isMobile) || fxForced) {
   n8ao.setQualityMode('Medium');
   composer.addPass(n8ao);
   // volumetric light shafts from the sun disc
+  // volumetric light shafts from the sun disc. Weight is deliberately low:
+  // god rays smear the sky's brightness radially across whatever is in front
+  // of it, which was adding a second glow behind the castle on top of the
+  // scattering dome's own horizon band.
   godRays = new GodRaysEffect(camera, world.sky.sunSphere, {
     resolutionScale: 0.5,
     density: 0.9,
     decay: 0.92,
-    weight: 0.11,
+    weight: 0.05,
     samples: 30,
   });
   // dreamy depth blur, only while the title screen's cinematic camera runs
@@ -153,7 +157,9 @@ if ((!softwareGL && !isMobile) || fxForced) {
   composer.addPass(new EffectPass(
     camera,
     godRays,
-    new BloomEffect({ intensity: 0.42, luminanceThreshold: 0.85, luminanceSmoothing: 0.18, mipmapBlur: true }),
+    // threshold sits above the graded sky: bloom should catch the sun, the
+    // crystals and the water, not the whole upper half of the frame
+    new BloomEffect({ intensity: 0.42, luminanceThreshold: 0.92, luminanceSmoothing: 0.14, mipmapBlur: true }),
     new HueSaturationEffect({ saturation: 0.1 }),
     new BrightnessContrastEffect({ contrast: 0.08 }),
     new VignetteEffect({ offset: 0.32, darkness: 0.42 }),
@@ -557,6 +563,7 @@ window.__game = {
   get assetFailures() { return [...assets.failures]; },
   get usingModelPlayer() { return !player.isProcedural; },
   setTimeOfDay(t) { world.sky.setTime(t); },
+  rockZones() { return world.rockZones; },
   crystalPositions() { return world.crystals.map((c) => ({ x: c.x, y: c.baseY, z: c.z, collected: c.collected })); },
   groundHeight(x, z) { return world.groundHeight(x, z); },
   drawCalls() { return renderer.info.render.calls; },
