@@ -171,6 +171,24 @@ export function buildModularCastle(models, { x, z, groundY, groundAt = null }) {
   // colours, so their material colour is baked into a vertex-colour attribute
   // and the whole castle is merged into ONE mesh with a single painted
   // material. Banners stay separate because they animate.
+  // The mirror's GLBs lost the pack's palette texture — every material is flat
+  // 0.8 grey — but the material NAMES survive, so the palette is authored here
+  // by name. Values are chosen for the frame's value structure: the castle must
+  // read as a warm mid-dark mass against a bright sky, not wash into it.
+  const STONE_PALETTE = {
+    lightrock: new THREE.Color(0.360, 0.320, 0.270), // warm face stone
+    darkrock: new THREE.Color(0.200, 0.185, 0.170),  // trim / shadow courses
+    celing: new THREE.Color(0.115, 0.175, 0.265),    // slate roofs (game's blue)
+    lightwood: new THREE.Color(0.330, 0.215, 0.115), // timber
+    banner: new THREE.Color(0.430, 0.075, 0.085),    // heraldic crimson
+    black: new THREE.Color(0.055, 0.050, 0.048),     // iron
+  };
+  const stoneColorFor = (matName) => {
+    const key = String(matName || '').toLowerCase().replace(/[^a-z]/g, '');
+    for (const k of Object.keys(STONE_PALETTE)) if (key.startsWith(k)) return STONE_PALETTE[k];
+    return STONE_PALETTE.lightrock;
+  };
+
   const bannerSet = new Set(banners);
   const geos = [];
   const leftovers = [];
@@ -186,7 +204,7 @@ export function buildModularCastle(models, { x, z, groundY, groundAt = null }) {
     }
     const geo = g.toNonIndexed();
     const n = geo.attributes.position.count;
-    const col = (o.material && o.material.color) || new THREE.Color(0xffffff);
+    const col = stoneColorFor(o.material && o.material.name);
     const colors = new Float32Array(n * 3);
     for (let i = 0; i < n; i++) {
       colors[i * 3] = col.r;
@@ -209,8 +227,14 @@ export function buildModularCastle(models, { x, z, groundY, groundAt = null }) {
     mesh.receiveShadow = true;
     batched.add(mesh);
   }
-  // re-attach the animated banners on top of the batch
+  // re-attach the animated banners on top of the batch, in the same palette
   for (const b of banners) {
+    b.traverse((o) => {
+      if (o.isMesh && o.material) {
+        o.material = o.material.clone();
+        o.material.color = stoneColorFor(o.material.name).clone();
+      }
+    });
     painterlyfy(b, { mottle: 0.12, rim: 0.6, mottleScale: 2.0 });
     batched.add(b);
   }

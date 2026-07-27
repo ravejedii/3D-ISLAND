@@ -10,8 +10,8 @@ import { RNG, clamp, lerp, smoothstep } from '../core/rng.js';
 const DAY_LENGTH = 240; // seconds per full cycle
 
 const PAL = {
-  day: { top: 0x4287d6, horizon: 0xbfe2f2, fog: 0xb7d8e9, sun: 0xfff3d6, hemiSky: 0xcae0ff, hemiGround: 0x8b9c63 },
-  sunset: { top: 0x35418c, horizon: 0xff9d5c, fog: 0xdca882, sun: 0xffb46b, hemiSky: 0xd99c7c, hemiGround: 0x6a5a4c },
+  day: { top: 0x4287d6, horizon: 0xbfe2f2, fog: 0x93b8d8, sun: 0xfff3d6, hemiSky: 0xcae0ff, hemiGround: 0x8b9c63 },
+  sunset: { top: 0x35418c, horizon: 0xff9d5c, fog: 0xc39067, sun: 0xffb46b, hemiSky: 0xd99c7c, hemiGround: 0x6a5a4c },
   night: { top: 0x0a1028, horizon: 0x233158, fog: 0x1a2240, sun: 0x9db4ff, hemiSky: 0x33415f, hemiGround: 0x232630 },
 };
 
@@ -34,9 +34,9 @@ export class Sky {
       this.dome.scale.setScalar(1800);
       this.dome.frustumCulled = false;
       this.atmo = this.dome.material.uniforms;
-      this.atmo.turbidity.value = 6;
+      this.atmo.turbidity.value = 3.4; // less suspended haze: the horizon was a white band that flattened all depth
       this.atmo.rayleigh.value = 1.6;
-      this.atmo.mieCoefficient.value = 0.004;
+      this.atmo.mieCoefficient.value = 0.0022;
       this.atmo.mieDirectionalG.value = 0.85;
       scene.add(this.dome);
     }
@@ -124,7 +124,7 @@ export class Sky {
     this.moon.scale.setScalar(110);
     scene.add(this.moon);
 
-    scene.fog = new THREE.Fog(PAL.day.fog, 150, 720);
+    scene.fog = new THREE.Fog(PAL.day.fog, 260, 980); // start past the far islands' midground so distance tints blue instead of whiting out
 
     this._colA = new THREE.Color();
     this.nightFactor = 0;

@@ -118,23 +118,32 @@ variant counts cut, small flora shadow-casting disabled (70 → 62).
 - **HUD**: crystal count set in the display face, gilded.
 - **README** rewritten to match what the project actually is now.
 
+## Pass 3 (value & atmosphere)
+
+- **Castle palette authored**: the mirror's GLBs had lost the pack's palette
+  texture (every material flat 0.8 grey — why the castle rendered near-white),
+  but material names survived. The palette is now authored by name: warm face
+  stone, darker trim courses, slate-blue roofs, timber, heraldic crimson
+  banners, iron. The castle finally reads as a mid-dark mass against the sky.
+- **Aerial perspective**: fog retuned from bright white-out (near 150) to a
+  sky-blue tint starting at 260 — distance now goes blue, not white — and the
+  scattering sky's turbidity/mie haze halved, which removes most of the white
+  horizon band.
+- **Path as material**: fine gravel speckle (two octaves), darker wheel ruts
+  either side of the crown, and a sun-dried straw verge where grass gives out
+  before the bare track.
+
 ## Remaining visible weaknesses
 
 Honest list, from the `after.png` capture:
 
-1. **The castle is too pale.** The Quaternius stone reads near-white against the
-   hazy horizon, so it lacks weight and its silhouette washes into the sky.
-   Needs a darker, warmer stone tint and stronger value separation.
-2. **The horizon is a white haze band.** Fog is too bright and starts too close,
-   flattening all depth. There is no real aerial-perspective gradation between
-   midground and background.
-3. **The dirt path is still a flat painted strip.** No worn edges, no gravel, no
-   verge where grass thins into bare earth.
-4. **The terrain still reads as one continuous green.** Smooth now, but no
-   distinct biome zones, no rock outcrops breaking the meadow.
-5. **The character silhouette is unchanged** — still the KayKit knight, which is
-   fine but not distinctive, and it was not part of this iteration's scope.
-6. Composition has no deliberate foreground framing element.
+1. **The terrain still reads as one continuous green.** No distinct biome
+   zones or rock outcrops breaking the meadow.
+2. **Horizon glow behind the castle** is reduced but still bright at low sun
+   angles; a height-graded fog would finish the job.
+3. Composition has no deliberate foreground framing element.
+4. The satellite-island buildings (KayKit hexagon pack) are stylistically
+   louder than the new castle and could be re-dressed.
 
 ## Next three highest-impact improvements
 

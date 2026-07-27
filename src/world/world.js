@@ -155,9 +155,18 @@ export class World {
             pd = min(pd, distSeg(p, uPathSegs[i].xy, uPathSegs[i].zw));
           }
           pd += (vnoise(p * 0.55) - 0.5) * 0.9;
+          // the track is a material, not a flat strip: base dirt with fine
+          // gravel speckle, darker wheel ruts either side of the crown, and
+          // sun-dried verges where the grass gives out before bare earth
           vec3 pathCol = uPath * (0.88 + vnoise(p * 1.7) * 0.24);
+          float gravel = vnoise(p * 6.3) * 0.55 + vnoise(p * 14.0) * 0.45;
+          pathCol *= 0.90 + gravel * 0.20;
+          float rut = 1.0 - smoothstep(0.0, 0.16, abs(pd - 0.5));
+          pathCol = mix(pathCol, pathCol * 0.78, rut * 0.8);
           float onPath = 1.0 - smoothstep(1.05, 1.55, pd);
-          float wornEdge = (1.0 - smoothstep(1.55, 2.6, pd)) * 0.22;
+          float verge = (1.0 - smoothstep(1.4, 2.7, pd)) * (1.0 - onPath);
+          base = mix(base, base * vec3(1.08, 1.00, 0.66), verge * 0.5); // dry straw fringe
+          float wornEdge = (1.0 - smoothstep(1.55, 2.6, pd)) * 0.18;
           base = mix(base, base * 0.9, wornEdge);        // trampled fringe
           base = mix(base, pathCol, onPath * (1.0 - rockMix));
           csm_DiffuseColor.rgb = base;
