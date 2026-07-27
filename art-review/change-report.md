@@ -141,9 +141,33 @@ Honest list, from the `after.png` capture:
    zones or rock outcrops breaking the meadow.
 2. **Horizon glow behind the castle** is reduced but still bright at low sun
    angles; a height-graded fog would finish the job.
-3. Composition has no deliberate foreground framing element.
-4. The satellite-island buildings (KayKit hexagon pack) are stylistically
-   louder than the new castle and could be re-dressed.
+3. ~~Composition has no deliberate foreground framing element.~~ (pass 4)
+4. ~~The satellite-island buildings (KayKit hexagon pack) are stylistically
+   louder than the new castle and could be re-dressed.~~ (pass 4)
+
+## Pass 4 (hamlet re-dress + foreground framing)
+
+Capture: `art-review/agent-b.png` (same camera as `after.png`).
+
+- **The hamlet now belongs to the kingdom.** The KayKit hexagon-pack
+  outbuildings shipped a poster palette — cobalt roofs, pillar-box timber,
+  white plaster — and could not be tinted per part: each file is one mesh with
+  one material and all colour lives in a shared atlas. But that atlas is an
+  8×4 grid of flat swatches, i.e. a palette index, so `src/world/hamlet.js`
+  classifies every triangle by the atlas cell its UVs land in and bakes the
+  castle's colours into a vertex-colour attribute instead. Cobalt roof →
+  castle slate, red-brown timber → kingdom timber, white plaster → warm lime
+  wash, cool grey base → warm face stone, plus a muted crimson on the
+  shutters. `STONE_PALETTE` moved to module scope in `castle_modular.js` so
+  the castle and the hamlet share one authored palette.
+- **Foreground framing.** Two weathered waymarker stones
+  (`src/world/waymark.js`) stand west of the spawn track, at the left frame
+  edge — a near-field dark vertical the eye can read depth against, holding
+  the left margin against the satellite island on the right. Built from the
+  Quaternius rock through `bakeColored`, one InstancedMesh, one draw call,
+  clear of every path, walk route and perf waypoint.
+- **Budget:** draw calls 62 → **60** (merging each building's parts paid for
+  the stones), triangles ~134k of 150k.
 
 ## Next three highest-impact improvements
 

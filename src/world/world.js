@@ -4,7 +4,8 @@ import { Island } from './islands.js';
 import { Bridge } from './bridges.js';
 import { buildCastle, buildCourtyard, buildGateTorches } from './castle.js';
 import { buildModularCastle, updateBanners } from './castle_modular.js';
-import { placeModel } from '../core/assets.js';
+import { placeHamletBuilding } from './hamlet.js';
+import { buildWaymark } from './waymark.js';
 import CustomShaderMaterial from 'three-custom-shader-material/vanilla';
 import { sharedToonRamp, painterlyGlobals } from '../render/painterly.js';
 import { buildProps } from './props.js';
@@ -237,6 +238,11 @@ export class World {
     }
 
     // --- hamlet + satellite landmarks (model-only garnish) ---
+    // These are KayKit hexagon-pack buildings, whose "_blue" variants ship a
+    // poster palette (cobalt roofs, pillar-box timber, white plaster) that
+    // belonged to a different game than the castle. placeHamletBuilding()
+    // re-authors their shared colour atlas into the castle's palette — see
+    // src/world/hamlet.js for the cell-by-cell mapping.
     this.buildingSpots = [];
     const buildingPlan = [
       { gltf: models.homeA, x: 30, z: 12, scale: 4.4, rotY: 2.6, shrink: 0.8 },
@@ -251,10 +257,23 @@ export class World {
       const bz = b.isl !== undefined ? this.satellites[b.isl].center.z + b.dz : b.z;
       const ground = this.groundHeightIslands(bx, bz);
       if (!isFinite(ground)) continue;
-      const placed = placeModel(b.gltf, { x: bx, z: bz, y: ground - 0.1, scale: b.scale, rotY: b.rotY, colliderShrink: b.shrink });
+      const placed = placeHamletBuilding(b.gltf, { x: bx, z: bz, y: ground - 0.1, scale: b.scale, rotY: b.rotY, colliderShrink: b.shrink });
+      if (!placed) continue;
       scene.add(placed.model);
       this.colliders.push(...placed.colliders);
       this.buildingSpots.push({ x: bx, z: bz, r: 3.2 * (b.scale / 4.4) });
+    }
+
+    // --- foreground framing: waymarker stones west of the spawn track ---
+    // A near-field vertical mass at the left frame edge, so the hero view has
+    // a depth step instead of one flat plane. Deliberately off the paths and
+    // off every test route; absent entirely if the rock models didn't load.
+    const waymark = buildWaymark(models, { groundAt: (px, pz) => this.groundHeightIslands(px, pz) });
+    if (waymark) {
+      scene.add(waymark.mesh);
+      this.colliders.push(...waymark.colliders);
+      // registering them as building spots keeps scattered props and grass out
+      this.buildingSpots.push(...waymark.spots);
     }
 
     // --- pond + waterfalls ---
