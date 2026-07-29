@@ -566,6 +566,54 @@ window.__game = {
   rockZones() { return world.rockZones; },
   crystalPositions() { return world.crystals.map((c) => ({ x: c.x, y: c.baseY, z: c.z, collected: c.collected })); },
   groundHeight(x, z) { return world.groundHeight(x, z); },
+  // Grounding contract for the structure gate: every placed structure's
+  // footprint must stand on ground consistent with its base. The perched-
+  // castle bug (corner towers hanging over falling slope) shipped because
+  // nothing asserted this; now it is a checkable fact.
+  // Where the hero actually is on screen, in pixels — the hero gate analyses
+  // THIS rect instead of assuming the character sits centred (he doesn't: the
+  // orbit camera's smoothing and slope settle leave him off-centre, which
+  // silently turned the first version of the portrait check into a background
+  // check).
+  heroScreenRect() {
+    const v = new THREE.Vector3(player.position.x, player.position.y + 1.0, player.position.z);
+    const top = new THREE.Vector3(player.position.x, player.position.y + 2.1, player.position.z);
+    v.project(camera);
+    top.project(camera);
+    const cx = (v.x * 0.5 + 0.5) * window.innerWidth;
+    const cy = (-v.y * 0.5 + 0.5) * window.innerHeight;
+    const topY = (-top.y * 0.5 + 0.5) * window.innerHeight;
+    const halfH = Math.abs(cy - topY); // ~1.1m of world height in pixels
+    return { cx, cy, rx: halfH * 0.8, ry: halfH * 1.15 };
+  },
+  groundingReport() {
+    const out = [];
+    const probe = (label, cx, cz, r, baseY) => {
+      let worst = 0;
+      for (let i = 0; i < 8; i++) {
+        const a = (i / 8) * Math.PI * 2;
+        const g = world.groundHeightIslands
+          ? world.groundHeightIslands(cx + Math.cos(a) * r, cz + Math.sin(a) * r)
+          : world.groundHeight(cx + Math.cos(a) * r, cz + Math.sin(a) * r);
+        if (!isFinite(g)) continue;
+        worst = Math.max(worst, Math.abs(g - baseY));
+      }
+      out.push({ label, drop: Math.round(worst * 100) / 100 });
+    };
+    // castle: the four corner towers sit at ±half on both axes (half = 15.2)
+    const cc = world.castleCenter;
+    if (cc) {
+      const base = world.groundHeight(cc.x, cc.z);
+      probe('castle-NW', cc.x - 15.2, cc.z - 15.2, 2.2, base);
+      probe('castle-NE', cc.x + 15.2, cc.z - 15.2, 2.2, base);
+      probe('castle-SW', cc.x - 15.2, cc.z + 15.2, 2.2, base);
+      probe('castle-SE', cc.x + 15.2, cc.z + 15.2, 2.2, base);
+    }
+    for (const b of (world.buildingSpots || [])) {
+      probe('building', b.x, b.z, b.r * 0.8, world.groundHeight(b.x, b.z));
+    }
+    return out;
+  },
   drawCalls() { return renderer.info.render.calls; },
   triangles() { return renderer.info.render.triangles; },
   get qualityLevel() { return qualityIndex; },

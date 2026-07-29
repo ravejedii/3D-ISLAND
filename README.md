@@ -105,6 +105,7 @@ pnpm preview      # serve the production build on :4173
 pnpm test         # Playwright e2e + perf suite (23 tests, desktop + mobile)
 node scripts/visual-gate.mjs   # deterministic render checks (both paths)
 node scripts/ui-gate.mjs       # deterministic UI craft floor
+node scripts/hero-gate.mjs     # character portrait vs approved baseline + structure grounding
 node scripts/art-shot.mjs art-review/after.png   # reproducible hero framing
 ```
 

@@ -8,7 +8,7 @@
     "max_turns": 80
   },
   "command_gate": {
-    "command": "pnpm install --frozen-lockfile && pnpm build && pnpm test && node scripts/visual-gate.mjs && node scripts/ui-gate.mjs && node scripts/art-shot.mjs art-review/after.png && test -f art-review/before.png && test -f art-review/after.png && test -f art-review/change-report.md && test -f ASSET_LICENSES.md",
+    "command": "pnpm install --frozen-lockfile && pnpm build && pnpm test && node scripts/visual-gate.mjs && node scripts/ui-gate.mjs && node scripts/hero-gate.mjs && node scripts/art-shot.mjs art-review/after.png && test -f art-review/before.png && test -f art-review/after.png && test -f art-review/change-report.md && test -f ASSET_LICENSES.md",
     "timeout_seconds": 3000
   },
   "human_gate": {
