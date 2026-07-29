@@ -17,7 +17,14 @@ async function boot(page) {
 // renderer has warmed up — headless software rendering stutters at first.
 async function startSettled(page) {
   await page.evaluate(() => window.__game.start());
-  await page.waitForFunction(() => window.__game.grounded && window.__game.fps > 5, { timeout: 30000 });
+  // Liveness settle, not a quality bar: proves the loop runs and the player
+  // landed. The fps term exists only to skip the first stuttery frames; the
+  // actual frame-rate floors (with their rationale) live in perf.spec.js.
+  // 3 rather than 5 because the software rasterizer renders the spawn view
+  // at ~4-6 FPS depending on host load, and a settle precondition must not
+  // double as a hidden perf assertion that fails every movement test at
+  // its timeout.
+  await page.waitForFunction(() => window.__game.grounded && window.__game.fps > 3, { timeout: 30000 });
 }
 
 test('loads with a title screen and no console errors', async ({ page }) => {

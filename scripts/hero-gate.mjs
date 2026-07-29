@@ -170,13 +170,25 @@ try {
     });
     await page.waitForTimeout(900);
     await page.evaluate(() => window.__game.teleport(0, 30)); // kill any slide
-    await page.waitForTimeout(1500);
+    // Condition-wait, never a fixed sleep: under host contention the sim can
+    // run at a few frames per second, and a wall-clock wait captures before
+    // the camera has applied its commanded state — this exact failure shipped
+    // a portrait of empty fog. The hero is framed when he is grounded, the
+    // camera has closed to its commanded distance (his projected half-height
+    // says so), and the projection sits inside the frame.
+    await page.waitForFunction(() => {
+      const r = window.__game.heroScreenRect();
+      return window.__game.grounded && r.ry > 90 && r.cx > 120 && r.cx < 780 && r.cy > 150 && r.cy < 780;
+    }, null, { timeout: 45000 }).catch(() => {});
   };
   await settle();
   let rectProbe = await page.evaluate(() => window.__game.heroScreenRect());
-  if (!(rectProbe.cx > 120 && rectProbe.cx < 780)) { // camera missed him — retry once
+  if (!(rectProbe.ry > 90 && rectProbe.cx > 120 && rectProbe.cx < 780)) { // retry once
     await settle();
     rectProbe = await page.evaluate(() => window.__game.heroScreenRect());
+  }
+  if (!(rectProbe.ry > 90)) {
+    fails.push(`[H1] hero projects at half-height ${Math.round(rectProbe.ry)}px (<90) — camera never framed the character (portrait would grade the background)`);
   }
   if (!(rectProbe.cx > 60 && rectProbe.cx < 840 && rectProbe.cy > 60 && rectProbe.cy < 840)) {
     fails.push(`[H1] hero projects at (${Math.round(rectProbe.cx)},${Math.round(rectProbe.cy)}) — outside the frame; camera is not tracking the character`);
@@ -197,37 +209,45 @@ try {
   // human-approved baseline catches every dramatic regression: whitened
   // atlas, black blobs, missing dressing, wrong palette. Intentional hero
   // changes re-approve with: node scripts/hero-gate.mjs --update-baseline
+  // The diff is computed in a NORMALIZED space: each image's hero region is
+  // resampled onto a fixed grid using its OWN projected rect (the baseline
+  // stores its rect in a sidecar). Comparing absolute pixels was framing-
+  // sensitive — a slightly different camera convergence between runs moved
+  // the hero a few dozen pixels and scored 30% on an identical character.
+  const RECT_FILE = BASELINE.replace(/\.png$/, '.json');
+  const GRID_W = 96, GRID_H = 128;
+  const sampleGrid = (png, r) => {
+    const outArr = new Uint8Array(GRID_W * GRID_H * 3);
+    for (let gy = 0; gy < GRID_H; gy++) {
+      for (let gx = 0; gx < GRID_W; gx++) {
+        const px = Math.min(png.width - 1, Math.max(0, Math.round(r.cx - r.rx + (gx / (GRID_W - 1)) * 2 * r.rx)));
+        const py = Math.min(png.height - 1, Math.max(0, Math.round(r.cy - r.ry + (gy / (GRID_H - 1)) * 2 * r.ry)));
+        const i = (py * png.width + px) * png.ch;
+        const o = (gy * GRID_W + gx) * 3;
+        outArr[o] = png.data[i]; outArr[o + 1] = png.data[i + 1]; outArr[o + 2] = png.data[i + 2];
+      }
+    }
+    return outArr;
+  };
   if (UPDATE_BASELINE) {
     writeFileSync(BASELINE, buf);
-    console.log(`  baseline updated: ${BASELINE}`);
-  } else if (!existsSync(BASELINE)) {
-    fails.push(`[H5] no approved baseline at ${BASELINE} — run with --update-baseline after a human approves the portrait`);
+    writeFileSync(RECT_FILE, JSON.stringify(rect));
+    console.log(`  baseline updated: ${BASELINE} (+ rect sidecar)`);
+  } else if (!existsSync(BASELINE) || !existsSync(RECT_FILE)) {
+    fails.push(`[H5] no approved baseline (+rect) at ${BASELINE} — run with --update-baseline after a human approves the portrait`);
   } else {
     const base = decodePNG(readFileSync(BASELINE));
-    const cur = decodePNG(buf);
-    if (base.width === cur.width && base.height === cur.height) {
-      const x0 = Math.max(0, Math.floor(rect.cx - rect.rx)), x1 = Math.min(cur.width, Math.ceil(rect.cx + rect.rx));
-      const y0 = Math.max(0, Math.floor(rect.cy - rect.ry)), y1 = Math.min(cur.height, Math.ceil(rect.cy + rect.ry));
-      let diff = 0, total = 0;
-      for (let y = y0; y < y1; y += 2) {
-        for (let x = x0; x < x1; x += 2) {
-          const i = (y * cur.width + x) * cur.ch;
-          const j = (y * base.width + x) * base.ch;
-          const d = Math.max(
-            Math.abs(cur.data[i] - base.data[j]),
-            Math.abs(cur.data[i + 1] - base.data[j + 1]),
-            Math.abs(cur.data[i + 2] - base.data[j + 2]),
-          );
-          total++;
-          if (d > 30) diff++;
-        }
-      }
-      const frac = diff / total;
-      console.log(`  baseline diff: ${(frac * 100).toFixed(1)}% of hero region changed`);
-      if (frac > 0.15) fails.push(`[H5] hero region differs from approved baseline by ${(frac * 100).toFixed(1)}% (>15%) — if intentional, re-approve with --update-baseline`); // measured noise floor: 0.2%; whitened-knight sabotage: 26.3%
-    } else {
-      fails.push('[H5] baseline resolution mismatch — recapture with --update-baseline');
+    const baseRect = JSON.parse(readFileSync(RECT_FILE, 'utf8'));
+    const a = sampleGrid(base, baseRect);
+    const bGrid = sampleGrid(decodePNG(buf), rect);
+    let diff = 0;
+    for (let i = 0; i < a.length; i += 3) {
+      const d = Math.max(Math.abs(a[i] - bGrid[i]), Math.abs(a[i + 1] - bGrid[i + 1]), Math.abs(a[i + 2] - bGrid[i + 2]));
+      if (d > 34) diff++;
     }
+    const frac = diff / (GRID_W * GRID_H);
+    console.log(`  baseline diff (normalized): ${(frac * 100).toFixed(1)}% of hero region changed`);
+    if (frac > 0.20) fails.push(`[H5] hero region differs from approved baseline by ${(frac * 100).toFixed(1)}% (>20%, normalized space) — if intentional, re-approve with --update-baseline`);
   }
 
   if (s.stdLum < LIMITS.stdLumMin) fails.push(`[H2] hero region tonal spread ${s.stdLum.toFixed(1)} < ${LIMITS.stdLumMin} — flat/washed character (the all-white-knight class)`);

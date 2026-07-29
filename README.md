@@ -58,9 +58,12 @@ render path (no post-processing) tuned for phone GPUs.
   (curtain walls, gatehouse, stepped towers, cloth-animated banners) and merged
   into a single batched mesh; trees, rocks, bushes and ground flora are
   Quaternius Stylized Nature models instanced with per-instance tint/lean/scale
-  and an authored foliage palette; the player is KayKit's rigged, animated
-  Knight (idle/walk/run/jump via AnimationMixer). Every asset loads through a
-  central manager and degrades to a procedural fallback if missing
+  and an authored foliage palette; the player is the Quaternius Knight
+  (rigged and animated) wearing an authored heraldic kit (`src/player/dress.js`):
+  a tabard and heater shield carrying the game's own crest rasterized from the
+  UI's SVG artwork, a bone-chain skinned cape swayed by movement, pauldrons,
+  a fitted great helm with a plume crest, and a real sword. Every asset loads
+  through a central manager and degrades to a procedural fallback if missing
   (`?noassets` simulates this).
 - **World** — five floating islands from an analytic heightfield (the same
   math drives rendering and collision), a flattened castle plateau, clump-based

@@ -151,6 +151,31 @@ variant counts cut, small flora shadow-casting disabled (70 → 62).
   definition, three consumers, no drift. Stone palette authored to warm mid
   grey; ambient rock scatter halved so the mass lives in the ridges.
 
+## Pass 6 (parallel agents: hero overhaul + bailey/shoreline/vegetation)
+
+- **Hero replaced at the root.** The "block-ish Minecraft character" verdict
+  was about proportions (KayKit chibi: ~3 heads tall, head 35% of body).
+  New base: Quaternius KnightCharacter (6.5 heads, fingers, real shoulders,
+  same studio as the world), dressed by a new authoring system
+  (src/player/dress.js): crest tabard rasterized from the UI's own SVG
+  emblem, 6-bone skinned cape driven by movement, pauldrons, gilded
+  gauntlets painted into vertex colours by bone region, fitted great helm
+  with coronet + kept plume crest, real sword, crest heater shield.
+  59 draws / 134.4k tris — below the previous hero's cost.
+- **Bailey interior** composed as scenes (training ground, supply yard,
+  wall banners, paved keep forecourt) — one merged mesh, 1 draw call.
+- **Pond shoreline**: waterline is the terrain's own contour, wet mud ring
+  from height-vs-waterlevel, shore stones and reed stands at zero extra
+  draw calls, milky grazing reflection fixed.
+- **Willow/bush silhouettes**: spreading-skirt willow variant at fewer
+  triangles than the cone it replaces; bushes gathered into thickets.
+- **Gate hardening en route**: the hero gate's capture now waits on game
+  state (grounded, projected size, in-frame) instead of wall-clock sleeps
+  — under host contention the sim runs a few frames a second and fixed
+  waits photographed an unconverged camera; and the baseline diff is
+  computed in a normalized hero-rect space so framing drift cannot fake a
+  character change.
+
 ## Remaining visible weaknesses
 
 Honest list, from the `after.png` capture:
