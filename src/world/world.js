@@ -4,6 +4,7 @@ import { Island } from './islands.js';
 import { Bridge } from './bridges.js';
 import { buildCastle, buildCourtyard, buildGateTorches } from './castle.js';
 import { buildModularCastle, updateBanners } from './castle_modular.js';
+import { buildBaileyYard } from './bailey.js';
 import { placeHamletBuilding } from './hamlet.js';
 import { buildWaymark } from './waymark.js';
 import CustomShaderMaterial from 'three-custom-shader-material/vanilla';
@@ -106,6 +107,17 @@ export class World {
         uSoil: { value: new THREE.Color(0x8b7050) },
         uRockZones: { value: Array.from({ length: MAX_ROCK_ZONES }, () => new THREE.Vector4(1e5, 1e5, 1e5, 1e5)) },
         uRockZoneR: { value: new Array(MAX_ROCK_ZONES).fill(0) },
+        // pond shore: centre xz, basin radius, water level. The wet ring is
+        // painted by HEIGHT RELATIVE TO THE WATER, not by radius, so it
+        // follows the real waterline (this basin is markedly lopsided — the
+        // water reaches 1.5m from centre on its west side and 10m on its
+        // east) instead of drawing a ring the water never touches.
+        uPond: { value: new THREE.Vector4(1e5, 1e5, 0, 0) },
+        uSand: { value: new THREE.Color(0xbda484) },
+        uMud: { value: new THREE.Color(0x6b5942) },
+        // the keep's forecourt: a worn paved apron, centre xz + radius
+        uYard: { value: new THREE.Vector4(1e5, 1e5, 0, 0) },
+        uPaving: { value: new THREE.Color(0x968b7c) },
       },
       vertexShader: /* glsl */ `
         varying vec3 vWPos;
@@ -125,6 +137,11 @@ export class World {
         uniform vec3 uSoil;
         uniform vec4 uRockZones[8];
         uniform float uRockZoneR[8];
+        uniform vec4 uPond;
+        uniform vec3 uSand;
+        uniform vec3 uMud;
+        uniform vec4 uYard;
+        uniform vec3 uPaving;
         float distSeg(vec2 p, vec2 a, vec2 b) {
           vec2 ab = b - a;
           float t = clamp(dot(p - a, ab) / dot(ab, ab), 0.0, 1.0);
@@ -192,6 +209,49 @@ export class World {
             vec3 screeCol = uScree * (0.76 + grit * 0.48);
             screeCol = mix(screeCol, screeCol * 0.70, smoothstep(0.60, 0.88, vnoise(p * 5.5 + 3.0)) * 0.8);
             base = mix(base, screeCol, smoothstep(0.28, 0.95, outcrop) * 0.88);
+          }
+          // --- pond shore ---------------------------------------------
+          // A lake edge is a MATERIAL transition, not a polygon boundary:
+          // saturated mud under and at the water, drying to pale sand up the
+          // bank, grass closing back over it about a metre above the line.
+          // Driving it off (height - water level) means the band hugs the
+          // real shoreline including the shallow east lobe. Gated on the
+          // basin's radius so the rest of the island never pays for it.
+          float pondD = length(p - uPond.xy);
+          if (pondD < uPond.z) {
+            float basin = 1.0 - smoothstep(uPond.z * 0.55, uPond.z, pondD);
+            // wobble the band so the waterline is ragged, not a contour line
+            float wob = (vnoise(p * 0.75 + 9.0) - 0.5) * 0.30
+                      + (vnoise(p * 2.7) - 0.5) * 0.13;
+            float dh = vWPos.y - uPond.w + wob;   // height above the water
+            // narrow: a beach a metre wide, with turf closing back over it
+            float shore = (1.0 - smoothstep(-0.02, 0.36, dh)) * basin;
+            vec3 sand = uSand * (0.84 + vnoise(p * 2.6) * 0.30);
+            sand *= 0.93 + vnoise(p * 9.5) * 0.14;          // wet grit
+            float wet = 1.0 - smoothstep(-0.62, 0.02, dh);  // in and at the water
+            sand = mix(sand, uMud * (0.88 + vnoise(p * 4.3) * 0.24), wet * 0.9);
+            // patchy at the top of the bank, so grass and sand interlock
+            float ragged = 0.60 + vnoise(p * 1.9 + 17.0) * 0.55;
+            base = mix(base, sand, clamp(smoothstep(0.04, 0.55, shore) * ragged, 0.0, 1.0) * 0.94);
+          }
+          // --- keep forecourt: worn paving -----------------------------
+          // The bailey's one piece of ground treatment. A radial apron laid
+          // at the foot of the keep, its edge broken by noise and its slabs
+          // scored by a two-axis grid, so the yard has a floor the eye can
+          // read the buildings standing on.
+          float yardD = length(p - uYard.xy) - uYard.z;
+          if (yardD < 2.5) {
+            yardD += (vnoise(p * 0.42 + 4.0) - 0.5) * 2.2 + (vnoise(p * 1.6) - 0.5) * 0.7;
+            float pave = 1.0 - smoothstep(-0.8, 1.4, yardD);
+            vec3 slab = uPaving * (0.84 + vnoise(p * 1.1) * 0.30);
+            vec2 cell = floor(p * 1.15);
+            slab *= 0.88 + hash12(cell) * 0.26;              // slab-to-slab value
+            vec2 g2 = abs(fract(p * 1.15) - 0.5);
+            float joint = smoothstep(0.43, 0.5, max(g2.x, g2.y));
+            slab *= 1.0 - joint * 0.34;                      // mortar joints
+            // worn to earth toward the edge, where the paving runs out
+            slab = mix(uSoil * 0.92, slab, smoothstep(0.35, 0.85, pave));
+            base = mix(base, slab, pave * 0.92);
           }
           // worn dirt paths, wobbled by noise so edges aren't ruler-straight
           float pd = 1e6;
@@ -271,6 +331,21 @@ export class World {
       scene.add(torches.group);
       this.torchLight = torches.light;
       this.torchFlames = torches.flames;
+      // the yard inside the wall: training butts, supply stall, wall banners.
+      // One merged mesh (see src/world/bailey.js) so the dressing costs one
+      // draw call, and every collider is pushed off the gate→keep axis the
+      // e2e walk uses.
+      const yard = buildBaileyYard(models, {
+        x: castlePos.x, z: castlePos.z, groundY: 6.45, half: modular.half,
+        groundAt: (px, pz) => this.main.heightAt(px, pz),
+      });
+      if (yard) {
+        scene.add(yard.mesh);
+        this.colliders.push(...yard.colliders);
+        // paving under the keep's forecourt, centred between the keep's foot
+        // and the middle of the yard
+        terrainMat.uniforms.uYard.value.set(castlePos.x, castlePos.z - modular.half * 0.22, 7.6, 0);
+      }
     } else {
       const castle = buildCastle({ x: castlePos.x, z: castlePos.z, groundY: 6.5 });
       scene.add(castle.group);
@@ -320,10 +395,14 @@ export class World {
     }
 
     // --- pond + waterfalls ---
+    // The disc is wider than the water actually reaches, on purpose: past the
+    // waterline the terrain rises through it and occludes it, so the visible
+    // edge is the ground's own contour instead of the circle's rim.
     const pondY = this.main.heightAt(18, 26) + 0.55;
-    const pond = buildPond({ x: 18, z: 26, y: pondY, radius: 6.4 });
+    const pond = buildPond({ x: 18, z: 26, y: pondY, radius: 8.2 });
     scene.add(pond.mesh);
     this.updatables.push((dt, t) => (pond.uniforms.uTime.value = t));
+    terrainMat.uniforms.uPond.value.set(18, 26, 12.5, pondY);
 
     const fallSpots = [
       { isl: this.satellites[0], angle: 2.4 },
@@ -381,6 +460,10 @@ export class World {
 
     const props = buildProps(this.islands, {
       seed: SEED + 99, exclude, excludeVeg, rockZones: this.rockZones, models,
+      // the pond's bank: stones and reed stands placed off the waterline the
+      // heightfield actually produces, dealt into the rock and grass-clump
+      // InstancedMeshes so they add instances but no draw calls
+      shore: { x: 18, z: 26, waterY: pondY, r: 11 },
     });
     scene.add(props.group);
     this.colliders.push(...props.colliders);

@@ -138,7 +138,61 @@ function outcropSpots(zones, islands, rng, ok) {
   return spots;
 }
 
-export function buildProps(islands, { seed = 909, exclude, excludeVeg = exclude, rockZones = [], models = {} }) {
+// Spots on a pond's bank.
+//
+// Chosen by HEIGHT RELATIVE TO THE WATER, not by radius: this basin is
+// markedly lopsided (the water reaches ~1.5m from the centre on its west side
+// and ~10m on its east), so a ring of stones laid out on a circle would sit in
+// open grass on one side and out in the water on the other. Sampling the
+// heightfield and keeping only what falls in a narrow band around the
+// waterline makes the shore dressing follow the shore, whatever shape it is —
+// the same "one definition, several consumers" rule the rock zones follow,
+// with the heightfield as the definition.
+function shoreSpots(shore, islands, rng, count, loBand, hiBand, clusterR = 0) {
+  const spots = [];
+  if (!shore) return spots;
+  const sample = (x, z) => {
+    const isl = islands.find((I) => I.contains(x, z));
+    if (!isl) return null;
+    const y = isl.heightAt(x, z);
+    if (!isFinite(y)) return null;
+    const dh = y - shore.waterY;
+    if (dh < loBand || dh > hiBand) return null;
+    return { x, z, y, dh };
+  };
+  const pick = () => {
+    for (let t = 0; t < 50; t++) {
+      const a = rng.range(0, Math.PI * 2);
+      const r = Math.sqrt(rng.next()) * shore.r;
+      const s = sample(shore.x + Math.cos(a) * r, shore.z + Math.sin(a) * r);
+      if (s) return s;
+    }
+    return null;
+  };
+  if (clusterR <= 0) {
+    for (let i = 0; i < count; i++) {
+      const s = pick();
+      if (s) spots.push(s);
+    }
+    return spots;
+  }
+  // reeds grow in stands, never one at a time
+  const clusters = Math.max(1, Math.round(count / 4));
+  for (let c = 0; c < clusters && spots.length < count; c++) {
+    const centre = pick();
+    if (!centre) continue;
+    const n = Math.round(rng.range(3, 6));
+    for (let i = 0; i < n && spots.length < count; i++) {
+      const ang = rng.range(0, Math.PI * 2);
+      const rr = Math.sqrt(rng.next()) * clusterR;
+      const s = sample(centre.x + Math.cos(ang) * rr, centre.z + Math.sin(ang) * rr);
+      if (s) spots.push(s);
+    }
+  }
+  return spots;
+}
+
+export function buildProps(islands, { seed = 909, exclude, excludeVeg = exclude, rockZones = [], shore = null, models = {} }) {
   const rng = new RNG(seed);
   const group = new THREE.Group();
   const colliders = [];
@@ -205,7 +259,13 @@ export function buildProps(islands, { seed = 909, exclude, excludeVeg = exclude,
       defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round((isl.radius * 0.09) / pineTrees.length), scale: [1.4, 2.2], tint: [0xffffff, 0xcfe0c2], lean: 0.03, collideR: 0.14, maxSlope: 0.44, shadow: true, sway: 0.035 });
     }
     for (const v of willows) {
-      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round(isl.radius * 0.03), scale: [1.5, 2.0], tint: leafTint, lean: 0.04, collideR: 0.16, maxSlope: 0.36, shadow: true, sway: 0.06 });
+      // Willows are the one tree whose silhouette is horizontal: the crown
+      // spreads and weeps below its own widest point. Left at the model's
+      // proportions and a 2.0x scale they grew into tall lumpy cones — taller
+      // than the oaks around them and read as bad pines. `stretch` squashes
+      // every instance lower and broader, the scale range is pulled down, and
+      // the lean is doubled so no two stand plumb.
+      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round(isl.radius * 0.035), scale: [1.3, 1.75], stretch: [1.14, 0.90, 1.14], tint: leafTint, lean: 0.09, collideR: 0.16, maxSlope: 0.36, shadow: true, sway: 0.075 });
     }
   } else {
     // procedural fallback (no assets)
@@ -218,7 +278,19 @@ export function buildProps(islands, { seed = 909, exclude, excludeVeg = exclude,
   }
   if (bushVariants.length) {
     for (const v of bushVariants) {
-      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round((isl.radius * 0.26) / bushVariants.length), scale: [0.7, 1.35], tint: leafTint, lean: 0.07, collideR: 0, maxSlope: 0.5, shadow: false, sway: 0.09, veg: true });
+      // Bushes were near-spherical and evenly sprinkled, which is the two
+      // things that make a shrub read as a green ball: they are pressed wider
+      // than tall (undergrowth spreads, it does not stand up) and gathered
+      // into thickets, so the eye reads a mass with a broken outline instead
+      // of a field of individual blobs.
+      // (the squash is deliberately mild — these bushes are built from stacked
+      // lens shapes, and pressing them hard turns the stack into visible flat
+      // pancakes. The thicket and the lean do the work.)
+      // Tinted a stop DOWN from the canopy on purpose: undergrowth lives in
+      // the shade of what grows over it, and painting bushes in the same
+      // sunny leaf tint as the trees is what left them reading as pale blobs
+      // sat on the lawn instead of as the meadow's dark accents.
+      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round((isl.radius * 0.26) / bushVariants.length), scale: [0.6, 1.6], stretch: [1.18, 0.88, 1.18], tint: [0xa6c48a, 0x76916a], lean: 0.26, collideR: 0, maxSlope: 0.5, shadow: false, sway: 0.09, cluster: 4.5, veg: true });
     }
   } else {
     for (const geo of [bushGeometry(1), bushGeometry(2)]) {
@@ -240,9 +312,11 @@ export function buildProps(islands, { seed = 909, exclude, excludeVeg = exclude,
   // in clusters (see `cluster` below) so vegetation gathers into stands with
   // clear ground between, instead of an even sprinkle.
   if (grassClumps.length) {
-    for (const v of grassClumps) {
-      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round((isl.radius * 0.55) / grassClumps.length), scale: [0.9, 1.9], tint: [0xd6f2a8, 0x86c060], collideR: 0, maxSlope: 0.42, shadow: false, sway: 0.2, cluster: 5.5, veg: true });
-    }
+    grassClumps.forEach((v, i) => {
+      // the same clump model doubles as waterside reeds: `reedSlot` deals the
+      // shore stands into these meshes, stretched tall and narrow per instance
+      defs.push({ geo: v.geometry, material: v.material, per: (isl) => Math.round((isl.radius * 0.55) / grassClumps.length), scale: [0.9, 1.9], tint: [0xd6f2a8, 0x86c060], collideR: 0, maxSlope: 0.42, shadow: false, sway: 0.2, cluster: 5.5, veg: true, reedSlot: i, reedSlots: grassClumps.length });
+    });
   } else {
     defs.push({ geo: grassGeometry(), per: (isl) => Math.round(isl.radius * 1.6), scale: [0.7, 1.5], tint: [0xd0ff9e, 0x7fbf62], collideR: 0, maxSlope: 0.5, shadow: false, sway: 0.35, veg: true });
   }
@@ -269,6 +343,25 @@ export function buildProps(islands, { seed = 909, exclude, excludeVeg = exclude,
     ? outcropSpots(rockZones, islands, new RNG(seed + 4242), exclude)
     : [];
 
+  // shore dressing, on its own stream for the same reason: stones half in the
+  // water, reed stands at the waterline. Both are dealt into InstancedMeshes
+  // that already exist, so the pond's bank costs zero extra draw calls.
+  const shoreRng = new RNG(seed + 7171);
+  const shoreStones = shoreSpots(shore, islands, shoreRng, 18, -0.55, 0.55, 0)
+    // small, wet and bedded in: at a metre across these low-poly rocks read as
+    // dropped concrete blocks, and a shoreline is gravel, not boulders
+    .map((p) => ({ ...p, fixedS: shoreRng.range(0.3, 0.72), sink: 0.34, tint: 0x8d949a, noCollide: true }));
+  const shoreReeds = shoreSpots(shore, islands, shoreRng, 12, -0.18, 0.42, 1.6)
+    .map((p) => ({
+      ...p,
+      fixedS: shoreRng.range(1.05, 1.55),
+      stretch: [0.58, shoreRng.range(1.55, 2.05), 0.58],
+      sink: 0.12,
+      // a deeper, bluer green than the sunlit meadow clumps they share a mesh
+      // with, so the reed stands read as water plants rather than tall grass
+      tint: 0x8fb95f,
+    }));
+
   for (const def of defs) {
     const placements = [];
     for (const isl of islands) {
@@ -279,6 +372,10 @@ export function buildProps(islands, { seed = 909, exclude, excludeVeg = exclude,
     // geology adds instances but not draw calls
     if (def.rockSlots) {
       for (let i = def.rockSlot; i < outcrops.length; i += def.rockSlots) placements.push(outcrops[i]);
+      for (let i = def.rockSlot; i < shoreStones.length; i += def.rockSlots) placements.push(shoreStones[i]);
+    }
+    if (def.reedSlots) {
+      for (let i = def.reedSlot; i < shoreReeds.length; i += def.reedSlots) placements.push(shoreReeds[i]);
     }
     if (!placements.length) continue;
     const mat = def.material
@@ -310,16 +407,26 @@ export function buildProps(islands, { seed = 909, exclude, excludeVeg = exclude,
       // outcrop stones carry their own size from the ridge gradient, and are
       // bedded deeper into the ground so they read as rock coming UP through
       // the turf rather than props set down on it
-      const s = p.sz !== undefined
-        ? def.scale[0] + (def.scale[1] - def.scale[0]) * p.sz
-        : rng.range(def.scale[0], def.scale[1]);
-      dummy.position.set(p.x, p.y - (p.sz !== undefined ? 0.3 * s : 0.05), p.z);
+      const s = p.fixedS !== undefined
+        ? p.fixedS
+        : p.sz !== undefined
+          ? def.scale[0] + (def.scale[1] - def.scale[0]) * p.sz
+          : rng.range(def.scale[0], def.scale[1]);
+      const sink = p.sink !== undefined ? p.sink : (p.sz !== undefined ? 0.3 : 0.05 / s);
+      dummy.position.set(p.x, p.y - sink * s, p.z);
       const lean = def.lean || 0;
       dummy.rotation.set(rng.range(-lean, lean), rng.range(0, Math.PI * 2), rng.range(-lean, lean));
-      dummy.scale.setScalar(s);
+      // `stretch` breaks the uniform scale: reeds are narrow and tall, and the
+      // willows are squashed lower and wider than the model ships
+      const st = p.stretch || def.stretch;
+      if (st) dummy.scale.set(s * st[0], s * st[1], s * st[2]);
+      else dummy.scale.setScalar(s);
       dummy.updateMatrix();
       mesh.setMatrixAt(i, dummy.matrix);
-      if (def.tint) {
+      if (p.tint !== undefined) {
+        tintColor.set(p.tint); // shore stones sit a stop darker: they are wet
+        mesh.setColorAt(i, tintColor);
+      } else if (def.tint) {
         if (def.palette) {
           tintColor.set(rng.pick(def.tint));
         } else if (def.accentChance && rng.next() < def.accentChance) {
@@ -333,7 +440,7 @@ export function buildProps(islands, { seed = 909, exclude, excludeVeg = exclude,
       }
       // only the blocks big enough to stop a person collide; the scree debris
       // is walk-over dressing, which also keeps the collider list short
-      if (def.collideR > 0 && (p.sz === undefined || p.sz > 0.62)) {
+      if (def.collideR > 0 && !p.noCollide && (p.sz === undefined || p.sz > 0.62)) {
         colliders.push({ type: 'circle', x: p.x, z: p.z, r: def.collideR * s, minY: p.y - 1, maxY: p.y + 4 * s });
       }
     }

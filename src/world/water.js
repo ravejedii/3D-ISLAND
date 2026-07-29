@@ -32,29 +32,38 @@ export function buildPond({ x, z, y, radius }) {
         return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453);
       }
       void main() {
-        vec3 deep = vec3(0.09, 0.34, 0.45);
-        vec3 shallow = vec3(0.28, 0.62, 0.64);
+        vec3 deep = vec3(0.040, 0.200, 0.305);
+        vec3 shallow = vec3(0.140, 0.400, 0.455);
         float d = distance(vUv, vec2(0.5));
-        vec3 col = mix(deep, shallow, smoothstep(0.5, 0.18, d));
+        vec3 col = mix(shallow, deep, smoothstep(0.34, 0.10, d));
         col += vWave * 0.045;
         // grazing angles pick up the sky (cheap fresnel on a flat pond)
         vec3 viewDir = normalize(cameraPosition - vWPos);
         float fres = pow(1.0 - clamp(abs(viewDir.y), 0.0, 1.0), 3.0);
-        col = mix(col, vec3(0.62, 0.78, 0.88), fres * 0.45);
-        // sun glints: smaller, calmer cells
-        vec2 cell = floor(vUv * 70.0);
+        // grazing angles are the whole view of a pond you stand beside, so the
+        // sky mix has to stay a hint — at 0.45 it turned the middle of the
+        // water into a pool of milk
+        col = mix(col, vec3(0.55, 0.70, 0.82), fres * 0.14);
+        // sun glints: small enough to read as sparkle rather than as tiles
+        vec2 cell = floor(vUv * 150.0);
         float h = hash(cell);
         float blink = smoothstep(0.95, 1.0, sin(uTime * (0.9 + h * 1.6) + h * 40.0) * 0.5 + 0.5);
-        col += vec3(1.0, 0.98, 0.9) * blink * step(0.88, h) * 0.4;
-        // soft foam ring hugging the shore
-        float foamBand = smoothstep(0.415, 0.46, d + sin(atan(vUv.y - 0.5, vUv.x - 0.5) * 9.0 + uTime * 0.8) * 0.012);
-        col = mix(col, vec3(0.85, 0.95, 0.95), foamBand * 0.5);
-        float edge = smoothstep(0.5, 0.44, d);
-        gl_FragColor = vec4(col, 0.82 * edge);
+        col += vec3(1.0, 0.98, 0.9) * blink * step(0.90, h) * 0.30;
+        // No foam ring: the disc's rim is NOT the shoreline. The bank rises
+        // through this plane and occludes it, so the waterline is wherever
+        // the ground crosses the surface — a foam circle drawn at a fixed
+        // radius is exactly what made the pond read as a disc laid on grass.
+        // The wet-sand transition is painted into the terrain instead
+        // (uPond in the terrain shader); the water just thins out where it
+        // gets shallow, letting that sand show through.
+        float edge = smoothstep(0.5, 0.34, d);
+        float body = smoothstep(0.5, 0.17, d);
+        gl_FragColor = vec4(col, (0.48 + 0.44 * body) * edge);
       }
     `,
   });
-  const mesh = new THREE.Mesh(new THREE.CircleGeometry(radius, 28), mat);
+  // enough segments that the rim, where it does show, is a curve not a polygon
+  const mesh = new THREE.Mesh(new THREE.CircleGeometry(radius, 56), mat);
   mesh.rotation.x = -Math.PI / 2;
   mesh.position.set(x, y, z);
   return { mesh, uniforms };

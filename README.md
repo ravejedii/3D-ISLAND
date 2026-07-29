@@ -64,15 +64,19 @@ render path (no post-processing) tuned for phone GPUs.
   (`?noassets` simulates this).
 - **World** — five floating islands from an analytic heightfield (the same
   math drives rendering and collision), a flattened castle plateau, clump-based
-  meadow grass (26k+ blades in wind), sagging rope bridges, waterfalls, a pond,
-  dirt paths painted in the terrain shader.
+  meadow grass (26k+ blades in wind), sagging rope bridges, waterfalls, a pond
+  with a reeded, stony shore, and dirt paths, rock scree, a wet-sand waterline
+  and the keep's paved forecourt all painted in the terrain shader. Inside the
+  curtain wall the bailey is dressed as a working yard — archery butts and pell
+  dummies on one side, a market stall and its stock on the other — batched into
+  a single mesh.
 - **Gameplay** — third-person controller with capsule collision, ledge step-up,
   bridge rails, void respawn, footstep/landing dust and audio; 10 crystals,
   win screen with your time.
 - **UI** (`src/ui/`) — hand-drawn SVG artwork: a winged sky-crystal crest,
   filigree corner pieces, chamfered cut-plate surfaces, a struck-metal
   wordmark. No stock component styling.
-- **Performance** — instanced/merged geometry (~62 draw calls, ~136k
+- **Performance** — instanced/merged geometry (~61 draw calls, ~144k
   triangles), adaptive quality stepping, and a software-rasterizer detector
   that switches to a fast preset (`?lowgfx` forces it).
 
