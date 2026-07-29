@@ -79,17 +79,42 @@ untouched.
 
 ---
 
-## KayKit — Character Pack: Adventurers
+## Quaternius — Single Knight Pack
 
 | | |
 |---|---|
-| **Author** | Kay Lousberg (KayKit) |
+| **Author** | Quaternius |
 | **License** | CC0 1.0 Universal |
-| **Source** | https://kaylousberg.com · https://kaylousberg.itch.io |
-| **Location** | `public/assets/models/characters/Knight.glb` |
+| **Source** | https://quaternius.com |
+| **Retrieved via** | https://github.com/trebeljahr/quaternius-showcase |
+| **Location** | `public/assets/models/characters/Knight.glb` (pack's `KnightCharacter.glb`), `public/assets/models/characters/Knight_Helmet.glb` (pack's `Helmet3.glb`) |
 
-**Used for:** the player character, including its animation set (idle, walk,
-run, jump, cheer) driven in `src/player/controller.js`.
+**Used for:** the player character — a rigged, heroically proportioned knight
+with the animation set (`HumanArmature|Idle` / `|Walking` / `|Run` / `|Jump`,
+plus `|swordAttackJump` used as the victory flourish) driven in
+`src/player/controller.js`. The pack's `Helmet3` provides the visored faceplate
+of the great helm; the rest of the helm, the tabard, pauldrons, cape, belt and
+shield are authored in `src/player/dress.js`.
+
+This replaced KayKit's Adventurers Knight, whose chibi proportions (head ≈ 35%
+of body height, mitten hands, slab limbs) read as a toy next to the rest of the
+world. That file is no longer bundled.
+
+---
+
+## Quaternius — Medieval Weapons Pack
+
+| | |
+|---|---|
+| **Author** | Quaternius |
+| **License** | CC0 1.0 Universal |
+| **Source** | https://quaternius.com |
+| **Retrieved via** | https://github.com/trebeljahr/quaternius-showcase |
+| **Location** | `public/assets/models/characters/Knight_Sword.glb` (pack's `Sword.glb`) |
+
+**Used for:** the hero's arming sword — a real crossguarded blade in his weapon
+hand, baked to a single vertex-coloured mesh and re-palleted to the kingdom's
+gold/steel/crimson in `src/player/dress.js`.
 
 ---
 

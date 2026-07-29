@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { clamp } from '../core/rng.js';
-import { mergeGeometries } from 'three/addons/utils/BufferGeometryUtils.js';
 import { painterlyfy } from '../render/painterly.js';
+import { dressKnight, HERALDRY } from './dress.js';
 
 const GRAVITY = 30;
 const WALK_SPEED = 7;
@@ -10,8 +10,9 @@ const JUMP_SPEED = 11;
 const MAX_STEP = 0.85; // max ledge the player can walk up
 const KILL_Y = -70;
 
-// Animated KayKit Knight (glb) — or the original procedural adventurer when
-// the model is unavailable — plus movement physics against the analytic world.
+// The hero: a rigged Quaternius knight dressed in the kingdom's heraldry by
+// src/player/dress.js — or the original procedural adventurer when the model is
+// unavailable — plus movement physics against the analytic world.
 // Physics/collision are identical for both visual bodies.
 export class Player {
   constructor(world, knightGltf = null) {
@@ -28,6 +29,8 @@ export class Player {
     this.mixer = null;
     this.actions = {};
     this.currentAction = null;
+    this.dress = null;
+    this.elapsed = 0;
 
     this.group = new THREE.Group();
     this.isProcedural = !this.buildModelMesh(knightGltf);
@@ -61,70 +64,33 @@ export class Player {
           o.frustumCulled = false; // skinned bounds are unreliable
         }
       });
-      // normalize to ~1.85m tall regardless of source units
+      // normalize to ~2.05m tall regardless of source units — the hero must
+      // read at gameplay camera distance (dist 7)
       const box = new THREE.Box3().setFromObject(model);
       const height = Math.max(box.max.y - box.min.y, 0.001);
-      const s = 2.05 / height; // a touch larger: the hero must read at gameplay camera distance
+      const s = 2.05 / height;
       model.scale.setScalar(s);
       model.position.y = -box.min.y * s;
+      model.updateMatrixWorld(true); // bone sockets are derived from this
 
       // cloth and armour get the same painted treatment as the world, with a
       // stronger rim so the hero separates from the meadow behind him
       painterlyfy(model, { mottle: 0.12, rim: 0.8, mottleScale: 4.0 });
-      // Author the hero's identity per part (the meshes are named) so he
-      // belongs to THIS game's heraldry instead of reading as a stock asset:
-      // deep crimson cape matching the castle banners, cool steel plate a stop
-      // brighter than the scenery, warmed leather.
-      model.traverse((o) => {
-        if (!(o.isMesh || o.isSkinnedMesh) || !o.material || !o.material.color) return;
-        o.material = o.material.clone();
-        if (/Cape/i.test(o.name)) o.material.color.setRGB(1.15, 0.62, 0.66); // wine-crimson over the atlas red
-        else if (/Helmet|Arm|Leg/i.test(o.name)) o.material.color.setRGB(1.28, 1.32, 1.42); // cool steel
-        else if (/Shield/i.test(o.name)) o.material.color.setRGB(1.3, 1.18, 0.95); // warm boss
-        else o.material.color.setScalar(1.22);
-      });
 
-      // Plume crest on the helmet (added AFTER the outline pass on purpose: a
-      // solid crimson crest gains nothing from an ink hull, and skipping it
-      // saves a draw call): an arced fan of blades that gives the
-      // silhouette a readable identity at any distance. Parented to the head
-      // bone so it moves with the animation.
-      // parent to the helmet mesh node (not the bone): its local space is the
-      // space the helmet geometry lives in, so the crest can be seated from the
-      // helmet's real bounding box instead of guessed bone offsets
-      const helmetNode = model.getObjectByName('Knight_Helmet');
-      if (helmetNode && helmetNode.geometry) {
-        helmetNode.geometry.computeBoundingBox();
-        const hb = helmetNode.geometry.boundingBox;
-        const blades = [];
-        // dense overlapping blades merge into one horsehair crest instead of
-        // reading as separate spikes
-        for (let i = 0; i < 9; i++) {
-          const t = i / 8;
-          const g = new THREE.ConeGeometry(0.055 - t * 0.02, 0.20 + Math.sin(t * Math.PI) * 0.07, 5);
-          g.translate(0, 0.10, 0);
-          g.rotateX(-0.30 - t * 1.15); // sweep back over the crown
-          blades.push(g);
-        }
-        const plumeGeo = mergeGeometries(blades.map((g) => g.toNonIndexed()));
-        plumeGeo.computeVertexNormals();
-        const plume = new THREE.Mesh(
-          plumeGeo,
-          new THREE.MeshToonMaterial({ color: 0x9e1f2e, gradientMap: null }),
-        );
-        plume.castShadow = true;
-        plume.position.set(0, hb.max.y - 0.02, (hb.min.z + hb.max.z) / 2 - 0.03);
-        const helmetW = hb.max.x - hb.min.x;
-        plume.scale.setScalar(Math.max(0.6, helmetW * 1.25));
-        helmetNode.add(plume);
-        this.plume = plume;
-      }
+      // Author the hero's identity so he belongs to THIS kingdom instead of
+      // reading as a stock asset: tabard with the crest, pauldrons, a swaying
+      // cape, gilded gauntlets, great helm with the crimson plume, sword and
+      // heater shield. All of it is attached to bones in src/player/dress.js.
+      this.dress = dressKnight(model);
+      if (!this.dress) this.tintLegacyParts(model);
 
       this.mixer = new THREE.AnimationMixer(model);
       // Clip names differ per pack (KayKit: "Running_A"; Quaternius:
       // "HumanArmature|Run"), so match either. Quaternius has a single "Jump"
       // rather than the start/idle/land triple — it maps to jumpStart and the
-      // airborne/land states harmlessly no-op, holding that clip.
+      // airborne/land states harmlessly no-op, holding that clip. It also has
+      // no dedicated cheer, so the win flourish falls back to its jumping
+      // sword attack, which reads as a victory swing.
       const wanted = {
         idle: /(^|\|)Idle$/i,
         walk: /(^|\|)(Walking_A|Walking|Walk)$/i,
@@ -132,7 +98,7 @@ export class Player {
         jumpStart: /(^|\|)(Jump_Start|Jump)$/i,
         jumpIdle: /(^|\|)Jump_Idle$/i,
         jumpLand: /(^|\|)Jump_Land$/i,
-        cheer: /(^|\|)Cheer$/i,
+        cheer: /(^|\|)(Cheer|swordAttackJump)$/i,
       };
       for (const [key, re] of Object.entries(wanted)) {
         const clip = gltf.animations.find((c) => re.test(c.name));
@@ -151,6 +117,28 @@ export class Player {
     } catch (e) {
       console.warn('[player] knight setup failed, using procedural body', e);
       return false;
+    }
+  }
+
+  // Fallback identity pass for a character the dressing system can't rig (no
+  // usable skeleton): tint the named parts of a texture-atlas model in place,
+  // which is how the previous KayKit hero was authored.
+  tintLegacyParts(model) {
+    model.traverse((o) => {
+      if (!(o.isMesh || o.isSkinnedMesh) || !o.material || !o.material.color) return;
+      o.material = o.material.clone();
+      if (/Cape/i.test(o.name)) o.material.color.setRGB(1.15, 0.62, 0.66); // wine-crimson over the atlas red
+      else if (/Helmet|Arm|Leg/i.test(o.name)) o.material.color.setRGB(1.28, 1.32, 1.42); // cool steel
+      else if (/Shield/i.test(o.name)) o.material.color.setRGB(1.3, 1.18, 0.95); // warm boss
+      else o.material.color.setScalar(1.22);
+    });
+    // untextured packs would go white under the atlas-lift above
+    if (!model.getObjectByProperty('isMesh', true)?.material?.map) {
+      model.traverse((o) => {
+        if ((o.isMesh || o.isSkinnedMesh) && o.material && o.material.color) {
+          o.material.color.copy(HERALDRY.steel);
+        }
+      });
     }
   }
 
@@ -363,12 +351,15 @@ export class Player {
     if (this.position.y < KILL_Y) this.respawn();
 
     // --- visuals ---
+    let turn = 0;
     if (moving) {
       const targetHeading = Math.atan2(dirX, dirZ);
       let d = targetHeading - this.heading;
       while (d > Math.PI) d -= Math.PI * 2;
       while (d < -Math.PI) d += Math.PI * 2;
-      this.heading += d * Math.min(1, 12 * dt);
+      const step = d * Math.min(1, 12 * dt);
+      this.heading += step;
+      turn = dt > 0 ? clamp(step / dt, -3, 3) : 0;
     }
     this.group.position.copy(this.position);
     this.group.rotation.y = this.heading;
@@ -386,6 +377,13 @@ export class Player {
       }
     } else {
       this.strideDist = 0;
+    }
+
+    // the cape trails from the movement state, not from the clip, so it reads
+    // the same whichever animation pack is driving the body
+    this.elapsed += dt;
+    if (this.dress) {
+      this.dress.update(dt, { speed: hSpeed, grounded: this.grounded, turn, time: this.elapsed });
     }
 
     if (this.mixer) {
