@@ -79,7 +79,10 @@ const models = await assets.loadAll({
   treeCommonA: 'nature_q/CommonTree_1.glb',
   treeCommonB: 'nature_q/CommonTree_3.glb',
   treePineA: 'nature_q/PineTree_1.glb',
-  treeWillow: 'nature_q/Willow_2.glb',
+  // Willow_4 rather than _2: _2's crown is a narrow lumpy cone that reads as a
+  // bad pine, _4 has the low spreading skirt a willow is recognised by
+  // (decimated to 972 tris, under the 1070 the old one cost)
+  treeWillow: 'nature_q/Willow_4.glb',
   rockA: 'nature_q/Rock_1.glb',
   rockB: 'nature_q/Rock_3.glb',
   rockMossA: 'nature_q/Rock_Moss_2.glb',
@@ -100,6 +103,19 @@ const models = await assets.loadAll({
   door: 'castle_q/Door.glb',
   window: 'castle_q/WindowGothic.glb',
   well: 'castle_q/Well.glb',
+  // bailey dressing: the training butts from the same castle kit, and the
+  // supply-yard stock from Quaternius Medieval Village (CC0)
+  target: 'castle_q/Target.glb',
+  targetArrows: 'castle_q/TargetWithArrows.glb',
+  dummy: 'castle_q/Dummy.glb',
+  barrel: 'village_q/Barrel.glb',
+  crate: 'village_q/Crate.glb',
+  hay: 'village_q/Hay.glb',
+  sacks: 'village_q/Bags.glb',
+  cart: 'village_q/Cart.glb',
+  stall: 'village_q/MarketStand_2.glb',
+  bench: 'village_q/Bench_1.glb',
+  fence: 'village_q/Fence.glb',
   // clumped vegetation (Quaternius Stylized Nature, CC0)
   grassClumpA: 'flora_q/Grass.glb',
   grassClumpB: 'flora_q/Grass_2.glb',

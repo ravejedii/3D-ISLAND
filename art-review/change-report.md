@@ -197,3 +197,106 @@ Capture: `art-review/agent-b.png` (same camera as `after.png`).
 3. **Terrain zoning**: rock outcrops and dirt/scree patches breaking the meadow,
    with vegetation density tied to zone, so the landscape reads as sculpted
    rather than one uniform lawn.
+
+---
+
+## Pass 6 (bailey interior, pond shoreline, willow/bush silhouettes)
+
+Captures: `agent-d.png` (hero, same camera as `after.png`), `agent-d-bailey.png`,
+`agent-d-pond.png`, `agent-d-veg.png`, `agent-d-veg-bush.png`; the two
+"before" frames kept for comparison are `agent-d-bailey-before.png` and
+`agent-d-pond-before.png`.
+
+### 1. The bailey is a yard again (`src/world/bailey.js`, new)
+
+Inside the curtain wall there was a well, two gate torches and 900m² of lawn.
+A bailey is a workplace, so it now has the two functions a bailey always had:
+
+- **Training ground, west wall** — three archery butts on an irregular pitch
+  (deliberately not an even fence-like row), a firing line of two pell dummies
+  angled at them, a straw store stacked behind and a rail fence closing the
+  south end off from the gate road.
+- **Supply yard, east wall** — a market stall with its stock stacked around it
+  (crates, barrels, sacks, straw) and a handcart backed up to be loaded.
+- **Wall furniture** — four banners hung on the inner faces, gothic window
+  reveals punched into the blank runs, and a postern door in the north wall
+  seen past the keep's shoulder.
+- **Keep forecourt** — a worn paved apron painted in the terrain shader (a
+  radial patch with a noise-broken edge, slab-to-slab value variation and
+  mortar joints, worn to bare earth at its rim), with firewood and a bench off
+  the central axis.
+
+The gate-to-keep axis is left EMPTY on purpose, so walking in you look down an
+open parade ground with activity framing you on both sides — and because that
+axis is the e2e walking route.
+
+All 32 static pieces are baked to vertex colours and merged into **one mesh**
+with a single painted material, the same batching the castle uses: the whole
+yard costs one draw call. Colours come from a `YARD_PALETTE` that inherits the
+castle's `STONE_PALETTE` for stone/timber/heraldry and authors the pack's new
+materials (sackcloth, straw, leather, canvas) in the same key.
+
+### 2. The pond has a shore (`src/world/water.js`, terrain shader, `props.js`)
+
+The pond read as a flat disc laid on grass because *everything about it was a
+circle*: the disc's rim, and a foam ring drawn at a fixed uv radius. The actual
+water body is nowhere near circular — the heightfield puts the waterline 1.5m
+from the centre on the west side and 10m on the east.
+
+- The disc is widened 6.4 → 8.2m and pushed into the bank, so past the
+  waterline the ground rises through it and occludes it: the visible edge is
+  now the terrain's own contour. The foam ring is gone.
+- A **wet-sand/mud ring is painted in the terrain shader**, driven by
+  `height − water level` (new `uPond`/`uSand`/`uMud` uniforms, gated on the
+  basin radius) rather than by distance, so it hugs the real shoreline: mud in
+  and at the water, drying to pale sand up the bank, turf interlocking back
+  over it about half a metre above the line.
+- **18 shore stones and 12 reed stands** are placed by sampling the same
+  height band and dealt round-robin into the *existing* rock and grass-clump
+  InstancedMeshes — zero extra draw calls. Reeds are the flora clump under a
+  narrow, tall per-instance stretch and a deeper green tint.
+- Water colour deepened and the grazing-angle sky mix cut 0.45 → 0.14; at the
+  old value the middle of the pond was a pool of milk.
+
+### 3. Willow and bush silhouettes (`src/world/props.js`)
+
+- **Willow_2 → Willow_4** (new asset, decimated 1568 → 972 tris, *below* the
+  1070 the old model cost). Willow_2's crown is a narrow lumpy cone that read
+  as a bad pine; Willow_4 has the low spreading skirt the tree is recognised
+  by. Instances are squashed lower and wider, the scale range pulled down from
+  1.5–2.0 to 1.3–1.75, and the lean doubled.
+- **Bushes** are gathered into thickets (`cluster: 4.5`) instead of sprinkled
+  evenly, leaned harder (0.07 → 0.26), given a wider size spread, and tinted a
+  stop DOWN from the canopy — undergrowth lives in shade, and painting bushes
+  in the trees' sunny leaf tint is what left them as pale blobs on the lawn.
+  A hard vertical squash was tried first and reverted: these bushes are built
+  from stacked lens shapes and pressing them turns the stack into visible
+  pancakes (see the honest note in the code).
+
+### Budget
+
+| | Before | After |
+|---|---|---|
+| Draw calls | 60 | **61** (ceiling 72) |
+| Triangles | 135,900 | **144,414** (budget 150,000) |
+
+The village-pack props are decimated to 12–35% of source to fit; the shore
+dressing and the willow swap are draw-call- and triangle-neutral or better.
+
+### Assets added
+
+Both CC0 1.0, provenance in `ASSET_LICENSES.md`:
+
+- Quaternius **Modular Medieval Buildings** → `castle_q/Target.glb`,
+  `TargetWithArrows.glb`, `Dummy.glb` (unmodified)
+- Quaternius **Medieval Village Pack** → `public/assets/models/village_q/`
+  (Barrel, Crate, Bags, Hay, Cart, Bench_1, MarketStand_2, Fence — decimated)
+- Quaternius **Stylized Nature** → `nature_q/Willow_4.glb` (decimated)
+
+### Verified
+
+`pnpm build`; `scripts/visual-gate.mjs` PASS on both render paths; the e2e gate
+walk (`teleport(0,6)` → `(0,-9)` → `(5.5,-11)`) and the bailey crystal pickup
+re-run by hand against the built bundle — the crystal is still at exactly
+`(-5.5, -12)`; `?noassets` boots and plays with 44 asset failures and no
+console errors.
