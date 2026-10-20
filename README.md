@@ -2,6 +2,8 @@
 
 **▶ Play it now: <https://ravejedii.github.io/3D-ISLAND/>** — works on desktop and mobile.
 
+![Floating Isles gameplay: exploring the island, with the castle and rope bridge in view](docs/floating-isles.gif)
+
 A stylized 3D adventure that runs in the browser. A scattered kingdom drifts in
 the endless sky — cross rope bridges between five floating islands, walk into
 the castle through its gatehouse, and recover the 10 lost sky crystals.
